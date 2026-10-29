@@ -433,3 +433,8 @@ func ParseTagFilters(filter string) ([]TagFilter, error) {
 	}
 	return out, nil
 }
+
+// UUIDFromInt derives a deterministic UUID text from n (test helper).
+func UUIDFromInt(n int64) string {
+	return fmt.Sprintf("00000000-0000-4000-8000-%012x", uint64(n)&0xffffffffffff)
+}

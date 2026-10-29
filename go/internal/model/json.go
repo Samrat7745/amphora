@@ -65,9 +65,7 @@ func parseObject(b []byte) (map[string]json.RawMessage, error) {
 	if err := dec.Decode(&m); err != nil || m == nil {
 		return nil, errBind
 	}
-	if _, err := dec.Token(); err == nil {
-		return nil, errBind // trailing content
-	}
+	// Jackson ignores trailing tokens (FAIL_ON_TRAILING_TOKENS is off by default).
 	return m, nil
 }
 
@@ -91,18 +89,16 @@ func jsonString(raw json.RawMessage) (s string, isNil bool, err error) {
 	return "", false, errBind
 }
 
-// Base64 decodes standard base64 (padding optional).
+// Base64 decodes standard padded base64.
 func Base64(raw json.RawMessage) ([]byte, bool, error) {
 	s, isNil, err := jsonString(raw)
 	if err != nil || isNil {
 		return nil, isNil, err
 	}
+	// Jackson's default variant requires padding.
 	out, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
-		out, err = base64.RawStdEncoding.DecodeString(s)
-		if err != nil {
-			return nil, false, errBind
-		}
+		return nil, false, errBind
 	}
 	return out, false, nil
 }
