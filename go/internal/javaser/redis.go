@@ -66,8 +66,15 @@ func (w *writer) bigInt(v *big.Int) {
 	w.u8(tcEndBlock)
 }
 
-// EncodeInputMaskList serialises TupleList<InputMask<Gfp>,Gfp> with one share per tuple.
-func EncodeInputMaskList(shares []Share) []byte {
+// EncodeInputMaskList serialises TupleList<InputMask<Gfp>,Gfp> with one share per tuple; the list's Field is the
+// same instance as the tuples' (what Java writes for locally built lists, see the Java-generated goldens).
+func EncodeInputMaskList(shares []Share) []byte { return encodeInputMaskList(shares, false) }
+
+// EncodeInputMaskListFromCastor is the variant Amphora writes in production: the tuples come from Castor's
+// deserialised response, so the list's Field is a distinct instance in Java's stream (observed with the real jar).
+func EncodeInputMaskListFromCastor(shares []Share) []byte { return encodeInputMaskList(shares, true) }
+
+func encodeInputMaskList(shares []Share, distinctListField bool) []byte {
 	w := newWriter()
 	w.newObject(descTupleList)
 	w.i32(int32(len(shares)))
@@ -95,13 +102,11 @@ func EncodeInputMaskList(shares []Share) []byte {
 		w.byteArray(s.Value)
 	}
 	w.u8(tcEndBlock)
-	if fieldHandle < 0 {
-		// empty list: Field.GFP is serialised after the (absent) elements
+	if fieldHandle < 0 || distinctListField {
+		// empty list, or Field.GFP written as its own instance after the elements
 		w.newObject(descGfp)
 		w.i32(16)
 		w.str("gfp", false)
-		fieldHandle = baseHandle + w.next - 1
-		// descInputMask is written lazily for the class reference below
 	} else {
 		w.ref(fieldHandle)
 	}
@@ -151,17 +156,21 @@ func EncodeExchangeObject(e ExchangeObject) []byte {
 	w := newWriter()
 	w.newObject(descMEO)
 	w.i32(e.PlayerID)
-	w.newObject(descArrayList)
-	w.i32(int32(len(e.Values)))
-	w.u8(tcBlockData)
-	w.u8(4)
-	w.i32(int32(len(e.Values)))
-	for _, p := range e.Values {
-		w.newObject(descFactorPair)
-		w.bigInt(p.A)
-		w.bigInt(p.B)
+	if e.Values == nil {
+		w.null()
+	} else {
+		w.newObject(descArrayList)
+		w.i32(int32(len(e.Values)))
+		w.u8(tcBlockData)
+		w.u8(4)
+		w.i32(int32(len(e.Values)))
+		for _, p := range e.Values {
+			w.newObject(descFactorPair)
+			w.bigInt(p.A)
+			w.bigInt(p.B)
+		}
+		w.u8(tcEndBlock)
 	}
-	w.u8(tcEndBlock)
 	w.uuid(e.OperationID)
 	return w.b.Bytes()
 }
@@ -202,6 +211,10 @@ func DecodeExchangeObject(b []byte) (*ExchangeObject, error) {
 		return nil, err
 	}
 	res := &ExchangeObject{OperationID: id, PlayerID: int32(pid), Values: []FactorPair{}}
+	if o.Fields["interimValues"] == nil {
+		res.Values = nil
+		return res, nil
+	}
 	l, ok := o.Fields["interimValues"].(*Object)
 	if !ok {
 		return nil, ErrFormat

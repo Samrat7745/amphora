@@ -135,7 +135,8 @@ func (a *API) route(w *statusWriter, r *http.Request) string {
 		return "/actuator/info"
 	case len(seg) == 2 && seg[0] == "actuator" && seg[1] == "prometheus":
 		if allow("GET") {
-			promhttp.HandlerFor(a.reg, promhttp.HandlerOpts{}).ServeHTTP(w, r)
+			// pin the exact Content-Type Spring's Prometheus endpoint emits
+			promhttp.HandlerFor(a.reg, promhttp.HandlerOpts{}).ServeHTTP(&promCT{ResponseWriter: w}, r)
 		}
 		return "/actuator/prometheus"
 	case len(seg) == 1 && seg[0] == "secret-shares":
@@ -825,4 +826,18 @@ func (a *API) open(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// promCT overrides the Content-Type chosen by promhttp.
+type promCT struct{ http.ResponseWriter }
+
+const promContentType = "text/plain;version=0.0.4;charset=utf-8"
+
+func (p *promCT) WriteHeader(c int) {
+	p.Header().Set("Content-Type", promContentType)
+	p.ResponseWriter.WriteHeader(c)
+}
+func (p *promCT) Write(b []byte) (int, error) {
+	p.Header().Set("Content-Type", promContentType)
+	return p.ResponseWriter.Write(b)
 }

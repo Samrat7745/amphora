@@ -68,9 +68,17 @@ func TestExchangeObjectGolden(t *testing.T) {
 			t.Fatalf("pair %d", i)
 		}
 	}
-	empty := ExchangeObject{OperationID: e.OperationID, PlayerID: 0}
+	empty := ExchangeObject{OperationID: e.OperationID, PlayerID: 0, Values: []FactorPair{}}
 	if got := EncodeExchangeObject(empty); !bytes.Equal(got, fx(t, "meo_empty.bin")) {
 		t.Fatal("empty meo mismatch")
+	}
+	// null list/operation id (fields absent in the request), as observed from the real Java service
+	null := EncodeExchangeObject(ExchangeObject{})
+	if !bytes.HasSuffix(null, []byte{0x70, 0x70}) {
+		t.Fatalf("null meo should end in two TC_NULL: %x", null)
+	}
+	if d, err := DecodeExchangeObject(null); err != nil || d.Values != nil {
+		t.Fatal(err, d)
 	}
 }
 

@@ -29,7 +29,7 @@ func (c *Cache) Ping(ctx context.Context) error { return c.rdb.Ping(ctx).Err() }
 
 // PutInputMasks stores the input mask shares (no TTL).
 func (c *Cache) PutInputMasks(ctx context.Context, requestID string, shares []javaser.Share) error {
-	return c.rdb.Set(ctx, c.inputPrefix+requestID, javaser.EncodeInputMaskList(shares), 0).Err()
+	return c.rdb.Set(ctx, c.inputPrefix+requestID, javaser.EncodeInputMaskListFromCastor(shares), 0).Err()
 }
 
 // GetInputMasks returns (nil, false) when absent.
@@ -63,6 +63,9 @@ func (c *Cache) interimKey(opID string, player int32) string {
 // PutInterim stores an exchange object (overwrites, no TTL).
 func (c *Cache) PutInterim(ctx context.Context, e model.ExchangeObject) error {
 	je := javaser.ExchangeObject{OperationID: e.OperationID, PlayerID: e.PlayerID}
+	if e.Values != nil {
+		je.Values = []javaser.FactorPair{} // a null list (absent in the request) stays null, [] stays empty
+	}
 	for _, p := range e.Values {
 		je.Values = append(je.Values, javaser.FactorPair{A: p.A, B: p.B})
 	}
