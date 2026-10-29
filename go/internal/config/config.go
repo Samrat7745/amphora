@@ -37,6 +37,8 @@ type Config struct {
 	DBPassword, DBName string
 	DBPort             int
 	LogLevel           string
+	// JavaTagReplaceBug (extension COMPAT_JAVA_TAG_REPLACE_BUG) reproduces the always-failing PUT /tags.
+	JavaTagReplaceBug bool
 }
 
 // Getenv abstracts os.Getenv for tests.
@@ -110,6 +112,7 @@ func LoadFrom(get Getenv) (*Config, error) {
 	c.DBName = def("DB_NAME", "amphora") // extension: Java fixes the name to amphora
 	c.DBUser = get("DB_USER")
 	c.DBPassword = get("DB_PASSWORD")
+	c.JavaTagReplaceBug = boolean("COMPAT_JAVA_TAG_REPLACE_BUG")
 	c.LogLevel = strings.ToUpper(def("LOG_LEVEL", "INFO"))
 	if err != nil {
 		return nil, err

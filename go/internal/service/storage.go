@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/carbynestack/amphora-go/internal/castor"
@@ -16,6 +18,7 @@ import (
 	"github.com/carbynestack/amphora-go/internal/pgstore"
 	"github.com/carbynestack/amphora-go/internal/rediscache"
 	"github.com/carbynestack/amphora-go/internal/spdz"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Messages (identical to the Java constants).
@@ -58,8 +61,11 @@ type Service struct {
 	Spdz     *spdz.Utils
 	MacKey   *big.Int
 	PlayerID int
-	Log      *slog.Logger
-	Now      func() time.Time // for tests
+	// JavaTagReplaceBug reproduces the Java service where PUT /secret-shares/{id}/tags always fails
+	// with a Hibernate ObjectDeletedException (500) because reserved tags are re-saved after deletion.
+	JavaTagReplaceBug bool
+	Log               *slog.Logger
+	Now               func() time.Time // for tests
 }
 
 func (s *Service) now() time.Time {
@@ -98,12 +104,23 @@ func tagList(rows []pgstore.TagRow) []model.Tag {
 	return out
 }
 
+// dbErr maps database errors to what Spring/Hibernate surface as exception messages.
 func dbErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := err.(*model.Error); ok {
+	var me *model.Error
+	if errors.As(err, &me) {
 		return err
+	}
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) {
+		switch {
+		case strings.HasPrefix(pe.Code, "22"):
+			return model.Internal("could not execute statement; SQL [n/a]; nested exception is org.hibernate.exception.DataException: could not execute statement")
+		case strings.HasPrefix(pe.Code, "23"):
+			return model.Internal("could not execute statement; SQL [n/a]; constraint [%s]; nested exception is org.hibernate.exception.ConstraintViolationException: could not execute statement", pe.ConstraintName)
+		}
 	}
 	return model.Internal("%s", err.Error())
 }
@@ -371,6 +388,17 @@ func (s *Service) ReplaceTags(ctx context.Context, id string, tags []model.Tag, 
 	if err := s.authorize(ctx, userID, opa.TagUpdate, notAuthorizedTagUpdate, rows); err != nil {
 		return err
 	}
+	if s.JavaTagReplaceBug {
+		for _, rk := range ReservedTagKeys {
+			t, err := s.PG.FindTag(ctx, s.PG.Pool, id, rk)
+			if err != nil {
+				return dbErr(err)
+			}
+			if t != nil {
+				return model.Internal("org.hibernate.ObjectDeletedException: deleted instance passed to merge: [io.carbynestack.amphora.service.persistence.metadata.TagEntity#<null>]; nested exception is java.lang.IllegalArgumentException: org.hibernate.ObjectDeletedException: deleted instance passed to merge: [io.carbynestack.amphora.service.persistence.metadata.TagEntity#<null>]")
+			}
+		}
+	}
 	return dbErr(s.PG.InTx(ctx, func(q pgstore.Querier) error {
 		var keep []int32
 		for _, rk := range ReservedTagKeys {
@@ -508,9 +536,6 @@ func (s *Service) InputMasks(ctx context.Context, requestID string, count int64)
 
 // PutInterim stores an interim value set received from a peer (E14).
 func (s *Service) PutInterim(ctx context.Context, e model.ExchangeObject) error {
-	if e.OperationID == "" {
-		return model.NPE()
-	}
 	if err := s.Cache.PutInterim(ctx, e); err != nil {
 		return model.Internal("%s", err.Error())
 	}

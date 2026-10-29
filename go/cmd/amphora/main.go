@@ -117,11 +117,11 @@ func run() error {
 	odo := &service.ODO{Spdz: sp, Castor: cc, Peers: peers, Interim: cache, PlayerID: cfg.PlayerID,
 		NumPartners: len(cfg.VCPartners), OpeningTimeout: time.Duration(cfg.OpeningTimeoutMs) * time.Millisecond, Log: log}
 	svc := &service.Service{PG: pg, Obj: obj, Cache: cache, Opa: opaClient, Castor: cc, ODO: odo, Spdz: sp,
-		MacKey: cfg.MacKey, PlayerID: cfg.PlayerID, Log: log}
+		MacKey: cfg.MacKey, PlayerID: cfg.PlayerID, JavaTagReplaceBug: cfg.JavaTagReplaceBug, Log: log}
 
 	api := &httpapi.API{Svc: svc, JWT: jwt.Reader{Field: cfg.UserIDField},
 		Checks: []httpapi.HealthCheck{pg.Ping, cache.Ping},
-		Info: httpapi.Info{"name": "\"amphora-service\"", "description": "\"@project.description@\"", "groupId": "\"io.carbynestack\"",
+		Info: httpapi.Info{"name": "\"Amphora Service\"", "description": "\"Amphora bucket/object store service.\"", "groupId": "\"io.carbynestack\"",
 			"artifactId": "\"amphora-service\"", "version": "\"" + version + "\"", "apiVersion": "\"" + version + "\""},
 		Log: log}
 	srv := &http.Server{Addr: fmt.Sprintf(":%d", cfg.Port), Handler: api.Handler(), ReadHeaderTimeout: 30 * time.Second}

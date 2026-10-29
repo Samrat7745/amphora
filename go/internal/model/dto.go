@@ -376,7 +376,7 @@ func URLDecode(s string) (string, error) {
 				}
 				v, err := strconv.ParseUint(s[i+1:i+3], 16, 8)
 				if err != nil || s[i+1] == '+' || s[i+1] == '-' {
-					return "", fmt.Errorf("URLDecoder: Illegal hex characters in escape (%%) pattern - Error at index %d in: \"%s\"", badIndex(s[i+1:i+3]), s[i+1:i+3])
+					return "", fmt.Errorf("URLDecoder: Illegal hex characters in escape (%%) pattern - For input string: \"%s\"", s[i+1:i+3])
 				}
 				out = append(out, byte(v))
 				i += 3
@@ -387,16 +387,6 @@ func URLDecode(s string) (string, error) {
 		}
 	}
 	return strings.ToValidUTF8(string(out), "�"), nil
-}
-
-func badIndex(h string) int {
-	for i := 0; i < len(h); i++ {
-		c := h[i]
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
-			return i
-		}
-	}
-	return 0
 }
 
 // ParseTagFilter mirrors TagFilter.fromString; errors are IllegalArgumentExceptions (400 with message).

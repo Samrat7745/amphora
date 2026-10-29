@@ -54,6 +54,9 @@ func (c *Cache) DeleteInputMasks(ctx context.Context, requestID string) error {
 }
 
 func (c *Cache) interimKey(opID string, player int32) string {
+	if opID == "" {
+		opID = "null" // Java string concatenation of a null UUID
+	}
 	return fmt.Sprintf("%s%s_%d", c.interimPrefix, opID, player)
 }
 
