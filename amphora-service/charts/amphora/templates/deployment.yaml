@@ -86,6 +86,10 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.amphora.db.passwordSecretName }}
                   key: password
+            - name: DB_NAME
+              value: "{{ .Values.amphora.db.name }}"
+            - name: COMPAT_JAVA_TAG_REPLACE_BUG
+              value: "{{ .Values.amphora.compatJavaTagReplaceBug }}"
             - name: DB_PORT
               value: "{{ .Values.amphora.db.port }}"
             - name: LOG_LEVEL
