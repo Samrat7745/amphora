@@ -53,7 +53,9 @@ s, _ := c.GetSecret(ctx, id)
 ## Testing
 
 ```bash
-go vet ./... && go test ./...
+go vet ./... && go test -race ./...            # needs docker (Postgres/Redis/MinIO via testcontainers), skipped otherwise
+go test -race -coverprofile=cover.out -coverpkg=./... $(go list ./... | grep -v /e2e) && scripts/check-coverage.sh cover.out
+go test -run='^$' -fuzz='^FuzzParseMaskedInput$' -fuzztime=20s ./internal/model   # fuzz targets, see TESTS.md part C
 AMPHORA_URLS=... CASTOR_URLS=... go test -tags integration -run TestLive ./client   # live two-party flow
 go run ./tools/e2erun -amphora u0,u1 -castor c0,c1 -upload                           # full flow with MAC checks
 ```

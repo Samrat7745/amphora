@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"interimValues\":[{\"a\":1e999999999,\"b\":0.5}]}")

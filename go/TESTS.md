@@ -177,6 +177,35 @@ DeleteTags, transactions, constraints incl. varchar(255), DSN escaping).
 | spdz (MpSpdzIntegrationUtils) | spdz_test.go (golden vectors from the Java jar, existing) + spdz_extra_test.go (random round trips, messages, nameUUIDFromBytes) |
 | LiveGoServiceIT | out of scope |
 
+## Part C - additional unit, property, fuzz and contract tests
+
+Tests that go beyond the Java suites (new files, no Java counterpart). Paths relative to `go/`.
+
+| File | Covers |
+|---|---|
+| internal/pgstore/pgstore_query_test.go | every query against a real Postgres: tag filters `:` `<` `>` on STRING/LONG values (incl. non-numeric values -> 22P02), sorting asc/desc with ties and missing tags, mixed-type sort error, paging boundaries (past the end, size 1, larger than total, unpaged, size 0), delete/replace tags incl. the nil keep-list regression, unique/FK/length violations, 255/256 char keys and values, unicode, NUL bytes, NULL columns, concurrent inserts of one secret id, closed pool errors |
+| spdz/spdz_property_test.go | `testing/quick` and seeded round trips of ToGfp/FromGfp, edge values (0, 1, p-1, p, p+1, 2^128-1: p is accepted and decodes to 0, larger values are rejected with the Java message), limb helpers, additive sharing with MAC relation over wire bytes |
+| internal/service/odo_property_test.go | Beaver multiplication with 2..5 real `ODO` parties wired through in-memory interim stores: reconstructed products equal s*r and v*r, MAC relation of masks/triples, single bit flips in secret/mask/triple shares and MACs are detected, opening orders (peer first, self first, simultaneous, delayed), timeout when a peer never delivers, eviction after read |
+| internal/rediscache/cache_concurrent_test.go | interim values of two players in both orders and concurrently against real Redis; each value consumed exactly once by competing readers |
+| internal/service/storage_concurrency_test.go | concurrent createSecret of one id (one winner, loser gets AlreadyExists or the constraint error), concurrent StoreTag/UpdateTag/ReplaceTags, delete while reading, concurrent deletes |
+| internal/model/fuzz_test.go, internal/javaser/fuzz_test.go, internal/jwt/fuzz_test.go | fuzz targets: MaskedInput/SecretShare/ExchangeObject/Tag JSON parsers, tag filters, URLDecode, javaser decoders (never panic; round trip of encoder output), JWT claim extraction. HTTP-facing parsers must return 4xx class errors. Seed corpora and minimized crashers are in `testdata/fuzz/` and run as ordinary tests |
+| internal/httpapi/api_table_test.go | method matrix (405 + Allow) and 404 for every route, malformed query parameters, missing/invalid Authorization, content types, 4xx for malformed bodies, error mapping of every service error kind for every endpoint, panic recovery, health with each dependency down, info, Prometheus labels |
+| internal/opa/opa_failure_test.go | OPA 4xx/5xx, malformed/empty/odd JSON, slow header and slow body (context timeout), connection refused/reset, DNS failure: always "denied", never a hang |
+| internal/config/config_matrix_test.go | every variable: defaults, parsing, missing/invalid values with the exact error text, validation order |
+| client/contract_test.go | the public client against the real in-process `httpapi` handlers of 1..3 parties with an in-memory backend: create/get/delete secret (incl. integrity failure and a party down), tags, list/filter/sort/page, intra and inter VCP. Pins one inherited wire mismatch: `IntraVcpClient.GetSecretShare` sends no `programId`, the server answers 400 |
+| chart/chart_test.go | `helm template`/`helm lint` of `amphora-service/charts/amphora` (skipped without helm): env vars, ports, securityContext, probes, service type/annotations, db name, compat flag, image, kubeVersion |
+
+Fuzzing: `go test -run='^$' -fuzz='^FuzzParseMaskedInput$' -fuzztime=20s ./internal/model` (same for the other targets; use
+`-parallel 2` on small machines). CI runs every target for 15 s on pull requests (see `.github/workflows/go.build-and-test.yaml`),
+and checks the total statement coverage against a floor with `scripts/check-coverage.sh`.
+
+Defects found by these tests and fixed: (1) `parseBigNumber` allocated gigabytes for `1e999999999` (fuzz crasher in
+`internal/model/testdata/fuzz/FuzzParseExchangeObject`); (2) the Java serialization reader could loop forever on a class
+descriptor whose super chain refers to itself, recurse without bound and allocate by an attacker chosen array length
+(three crashers in `internal/javaser/testdata/fuzz`); (3) concurrent `POST /tags` with the same key could insert duplicate
+tag rows (check-then-insert, `tag_key` is not unique): the secret row is now locked in the tag transactions
+(`pgstore.LockSecret`); (4) a panic in a handler or backend aborted the connection instead of answering 500.
+
 ## n/a / differences
 
 - StorageServiceTest `givenDeleteObjectDataFails_whenDeleteObject` stubs `deleteSecretShareData` to throw; with a real MinIO the

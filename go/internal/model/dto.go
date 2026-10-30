@@ -265,6 +265,8 @@ func (e ExchangeObject) JSON() string {
 	return b.String()
 }
 
+const maxBigNumberBits = 4096
+
 func parseBigNumber(raw json.RawMessage) (*big.Int, error) {
 	s := strings.TrimSpace(string(raw))
 	if s == "" || s == "null" {
@@ -281,7 +283,9 @@ func parseBigNumber(raw json.RawMessage) (*big.Int, error) {
 	if !ok {
 		// Jackson accepts 1.0 / 1e2 for BigInteger as long as they are integral.
 		f, ok := new(big.Float).SetPrec(2048).SetString(s)
-		if !ok || !f.IsInt() {
+		// Reject absurd magnitudes before materialising them (1e999999999 would allocate gigabytes); Jackson caps
+		// number length at 1000 digits (~3300 bits) too.
+		if !ok || !f.IsInt() || f.MantExp(nil) > maxBigNumberBits {
 			return nil, errBind
 		}
 		v, _ = f.Int(nil)

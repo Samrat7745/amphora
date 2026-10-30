@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"secretId\":\"3bcf8308-8f50-4d24-a37b-b0075bb5e779\",\"data\":\"QUJD\",\"tags\":null}")

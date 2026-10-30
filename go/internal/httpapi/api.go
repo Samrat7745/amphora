@@ -113,11 +113,29 @@ func outcome(c int) string {
 func (a *API) serve(rw http.ResponseWriter, r *http.Request) {
 	w := &statusWriter{ResponseWriter: rw}
 	start := time.Now()
-	uri := a.route(w, r)
+	uri := a.safeRoute(w, r)
 	if w.code == 0 {
 		w.code = 200
 	}
 	a.hist.WithLabelValues("None", r.Method, outcome(w.code), strconv.Itoa(w.code), uri).Observe(time.Since(start).Seconds())
+}
+
+// safeRoute turns a panic in a handler or backend into a 500 (like Spring's catch-all handling) instead of
+// aborting the connection.
+func (a *API) safeRoute(w *statusWriter, r *http.Request) (uri string) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			if rec == http.ErrAbortHandler {
+				panic(rec)
+			}
+			a.Log.Error("panic while handling request", "method", r.Method, "path", r.URL.Path, "panic", rec)
+			if w.code == 0 {
+				a.writeError(w, model.Internal("%v", rec))
+			}
+			uri = "UNKNOWN"
+		}
+	}()
+	return a.route(w, r)
 }
 
 // segments splits the escaped path (one trailing slash is ignored, like Spring's trailing slash match).

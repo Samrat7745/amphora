@@ -163,6 +163,18 @@ func (s *Store) FindSecret(ctx context.Context, q Querier, id string) (bool, []T
 	return true, tags, err
 }
 
+// LockSecret takes a row lock on the secret for the rest of the transaction (serialises concurrent tag
+// changes of one secret: tag_key is not unique in the schema, so check-then-insert would otherwise race).
+// A missing secret is not an error.
+func (s *Store) LockSecret(ctx context.Context, q Querier, id string) error {
+	var one int
+	err := q.QueryRow(ctx, "SELECT 1 FROM amphora_secrets WHERE secret_id = $1 FOR UPDATE", id).Scan(&one)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	return err
+}
+
 // FindTag returns the tag row with the key or nil.
 func (s *Store) FindTag(ctx context.Context, q Querier, id, key string) (*TagRow, error) {
 	var r TagRow

@@ -37,7 +37,21 @@ type reader struct {
 	b       []byte
 	pos     int
 	handles []any
+	depth   int
 }
+
+// maxDepth bounds the nesting of objects/arrays/class descriptors: the streams are small and shallow, a corrupt
+// or hostile value must produce an error instead of exhausting the goroutine stack.
+const maxDepth = 256
+
+func (r *reader) enter() error {
+	r.depth++
+	if r.depth > maxDepth {
+		return ErrFormat
+	}
+	return nil
+}
+func (r *reader) leave() { r.depth-- }
 
 func (r *reader) need(n int) error {
 	if n < 0 || r.pos+n > len(r.b) {
@@ -102,6 +116,10 @@ func parse(b []byte) (any, error) {
 }
 
 func (r *reader) content() (any, error) {
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	defer r.leave()
 	tc, err := r.u8()
 	if err != nil {
 		return nil, err
@@ -170,6 +188,9 @@ func (r *reader) content() (any, error) {
 			r.handles[idx] = out
 			return out, nil
 		}
+		if int(n) > len(r.b)-r.pos { // every element takes at least one byte
+			return nil, ErrFormat
+		}
 		elems := make([]any, 0, n)
 		r.handles[idx] = elems
 		for i := int32(0); i < n; i++ {
@@ -195,6 +216,10 @@ func (r *reader) content() (any, error) {
 }
 
 func (r *reader) classDesc() (*rdesc, error) {
+	if err := r.enter(); err != nil {
+		return nil, err
+	}
+	defer r.leave()
 	tc, err := r.u8()
 	if err != nil {
 		return nil, err
@@ -280,6 +305,9 @@ func (r *reader) object() (any, error) {
 	r.assign(obj)
 	var chain []*rdesc
 	for c := d; c != nil; c = c.super {
+		if len(chain) >= maxDepth { // a class descriptor whose super chain loops back on itself
+			return nil, ErrFormat
+		}
 		chain = append([]*rdesc{c}, chain...)
 	}
 	for _, c := range chain {

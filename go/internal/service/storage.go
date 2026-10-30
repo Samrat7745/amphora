@@ -361,6 +361,9 @@ func (s *Service) StoreTag(ctx context.Context, id string, tag model.Tag, userID
 		return "", err
 	}
 	err = s.PG.InTx(ctx, func(q pgstore.Querier) error {
+		if err := s.PG.LockSecret(ctx, q, id); err != nil {
+			return err
+		}
 		ex, err := s.PG.FindTag(ctx, q, id, tag.Key)
 		if err != nil {
 			return err
@@ -400,6 +403,9 @@ func (s *Service) ReplaceTags(ctx context.Context, id string, tags []model.Tag, 
 		}
 	}
 	return dbErr(s.PG.InTx(ctx, func(q pgstore.Querier) error {
+		if err := s.PG.LockSecret(ctx, q, id); err != nil {
+			return err
+		}
 		var keep []int32
 		for _, rk := range ReservedTagKeys {
 			t, err := s.PG.FindTag(ctx, q, id, rk)
@@ -466,6 +472,9 @@ func (s *Service) UpdateTag(ctx context.Context, id string, tag model.Tag, userI
 		return err
 	}
 	return dbErr(s.PG.InTx(ctx, func(q pgstore.Querier) error {
+		if err := s.PG.LockSecret(ctx, q, id); err != nil {
+			return err
+		}
 		ex, err := s.PG.FindTag(ctx, q, id, tag.Key)
 		if err != nil {
 			return err
@@ -490,6 +499,9 @@ func (s *Service) DeleteTag(ctx context.Context, id, key, userID string) error {
 		return err
 	}
 	return dbErr(s.PG.InTx(ctx, func(q pgstore.Querier) error {
+		if err := s.PG.LockSecret(ctx, q, id); err != nil {
+			return err
+		}
 		ex, err := s.PG.FindTag(ctx, q, id, key)
 		if err != nil {
 			return err

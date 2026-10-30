@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"tags\":[{\"key\":\"k\"},null,{\"key\":null},{\"key\":\"k\",\"valueType\":\"LONG\",\"value\":\"9999999999999999999999\"}]}")

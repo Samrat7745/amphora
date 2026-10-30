@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'go/**'
+      - 'amphora-service/charts/**'
       - '.github/workflows/go.build-and-test.yaml'
   push:
     branches:
@@ -25,7 +26,32 @@ jobs:
           cache-dependency-path: go/go.sum
       - name: Vet
         run: go vet ./...
-      - name: Unit tests
-        run: go test -race ./... -skip e2e
+      - name: Unit, property and contract tests (race detector, coverage)
+        run: |
+          go test -race -p 2 -coverprofile=cover.out -coverpkg=./... $(go list ./... | grep -v /e2e)
+      - name: Check coverage floor
+        run: scripts/check-coverage.sh cover.out
+      - name: Fuzz (15s per target)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          while read -r pkg target; do
+            echo "::group::fuzz $pkg $target"
+            go test -run='^$' -fuzz="^${target}\$" -fuzztime=15s -parallel 2 "$pkg"
+            echo "::endgroup::"
+          done <<'EOF'
+          ./internal/model FuzzParseMaskedInput
+          ./internal/model FuzzParseSecretShare
+          ./internal/model FuzzParseExchangeObject
+          ./internal/model FuzzParseTag
+          ./internal/model FuzzParseTagFilters
+          ./internal/model FuzzURLDecode
+          ./internal/javaser FuzzDecodeInputMaskList
+          ./internal/javaser FuzzDecodeExchangeObject
+          ./internal/javaser FuzzDecodeUploadResponse
+          ./internal/javaser FuzzRoundTripInputMaskList
+          ./internal/javaser FuzzRoundTripExchangeObject
+          ./internal/jwt FuzzUserID
+          EOF
       - name: Build image
         run: docker build -t amphora-go:ci .

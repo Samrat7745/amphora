@@ -1,0 +1,2 @@
+go test fuzz v1
+string("n>5,m<7")
