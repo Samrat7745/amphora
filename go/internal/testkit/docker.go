@@ -4,19 +4,19 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
-	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// Plain-docker containers for the persistence tests (Testcontainers does not work with Docker 29).
-// Containers are named ampB-<kind>-<pid>-<n> and removed by Lazy.Close (call it from TestMain).
+// Containers for the persistence tests, started with testcontainers-go (the Go port of the Testcontainers library the
+// Java tests used; it negotiates the Docker API version, so it works with current Docker engines). Each Start* returns
+// the address and a stop function; Lazy starts one on first use and terminates it on Close (call it from TestMain).
 
 // Images used by the Java integration tests (or the closest pinned equivalents).
 const (
@@ -28,73 +28,53 @@ const (
 	MinioSecretKey = "dummy-secret"
 )
 
-var seq struct {
-	sync.Mutex
-	n int
-}
-
-// DockerAvailable reports whether the docker CLI can talk to a daemon.
+// DockerAvailable reports whether a Docker daemon can be reached.
 func DockerAvailable() bool {
-	if _, err := exec.LookPath("docker"); err != nil {
+	p, err := testcontainers.NewDockerProvider()
+	if err != nil {
 		return false
 	}
-	return exec.Command("docker", "info", "--format", "{{.ServerVersion}}").Run() == nil
+	defer p.Close()
+	return p.Health(context.Background()) == nil
 }
 
-func docker(args ...string) (string, error) {
-	out, err := exec.Command("docker", args...).CombinedOutput()
-	return strings.TrimSpace(string(out)), err
-}
-
-// run starts a detached container publishing containerPort on a random loopback port; it returns
-// the host:port and a stop function.
-func run(kind string, containerPort int, image string, env []string, cmd ...string) (string, func(), error) {
+// run starts a container exposing port on a random host port; it returns host:port and a stop function.
+func run(req testcontainers.ContainerRequest, port string) (string, func(), error) {
 	if !DockerAvailable() {
 		return "", nil, fmt.Errorf("docker is not available")
 	}
-	seq.Lock()
-	seq.n++
-	name := fmt.Sprintf("ampB-%s-%d-%d", kind, os.Getpid(), seq.n)
-	seq.Unlock()
-	args := []string{"run", "-d", "--name", name, "-p", fmt.Sprintf("127.0.0.1::%d", containerPort)}
-	for _, e := range env {
-		args = append(args, "-e", e)
+	ctx := context.Background()
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: req, Started: true})
+	stop := func() {
+		if c != nil {
+			_ = c.Terminate(context.Background())
+		}
 	}
-	args = append(args, image)
-	args = append(args, cmd...)
-	if out, err := docker(args...); err != nil {
-		_, _ = docker("rm", "-f", name)
-		return "", nil, fmt.Errorf("docker run %s: %v: %s", image, err, out)
-	}
-	stop := func() { _, _ = docker("rm", "-f", "-v", name) }
-	out, err := docker("port", name, fmt.Sprintf("%d/tcp", containerPort))
 	if err != nil {
 		stop()
-		return "", nil, fmt.Errorf("docker port: %v: %s", err, out)
+		return "", nil, fmt.Errorf("starting %s: %w", req.Image, err)
 	}
-	addr := strings.Split(out, "\n")[0]
-	if i := strings.LastIndex(addr, ":"); i >= 0 {
-		addr = "127.0.0.1" + addr[i:]
+	host, err := c.Host(ctx)
+	if err != nil {
+		stop()
+		return "", nil, err
 	}
-	return addr, stop, nil
-}
-
-func waitTCP(addr string, d time.Duration) error {
-	deadline := time.Now().Add(d)
-	for time.Now().Before(deadline) {
-		c, err := net.DialTimeout("tcp", addr, time.Second)
-		if err == nil {
-			_ = c.Close()
-			return nil
-		}
-		time.Sleep(200 * time.Millisecond)
+	mapped, err := c.MappedPort(ctx, port)
+	if err != nil {
+		stop()
+		return "", nil, err
 	}
-	return fmt.Errorf("%s not reachable after %s", addr, d)
+	return net.JoinHostPort(host, mapped.Port()), stop, nil
 }
 
 // StartPostgres starts postgres and returns a DSN once it accepts queries.
 func StartPostgres() (string, func(), error) {
-	addr, stop, err := run("pg", 5432, PostgresImage, []string{"POSTGRES_PASSWORD=pw", "POSTGRES_USER=amphora", "POSTGRES_DB=amphora"})
+	addr, stop, err := run(testcontainers.ContainerRequest{
+		Image:        PostgresImage,
+		ExposedPorts: []string{"5432/tcp"},
+		Env:          map[string]string{"POSTGRES_PASSWORD": "pw", "POSTGRES_USER": "amphora", "POSTGRES_DB": "amphora"},
+		WaitingFor:   wait.ForLog("database system is ready to accept connections").WithOccurrence(2).WithStartupTimeout(90 * time.Second),
+	}, "5432/tcp")
 	if err != nil {
 		return "", nil, err
 	}
@@ -141,20 +121,22 @@ func minioReady(addr string) bool {
 
 // StartRedis starts redis and returns host:port.
 func StartRedis() (string, func(), error) {
-	addr, stop, err := run("redis", 6379, RedisImage, nil)
-	if err != nil {
-		return "", nil, err
-	}
-	if err := waitTCP(addr, 30*time.Second); err != nil {
-		stop()
-		return "", nil, err
-	}
-	return addr, stop, nil
+	return run(testcontainers.ContainerRequest{
+		Image:        RedisImage,
+		ExposedPorts: []string{"6379/tcp"},
+		WaitingFor:   wait.ForLog("Ready to accept connections").WithStartupTimeout(60 * time.Second),
+	}, "6379/tcp")
 }
 
 // StartMinio starts minio (credentials MinioAccessKey/MinioSecretKey) and returns host:port.
 func StartMinio() (string, func(), error) {
-	addr, stop, err := run("minio", 9000, MinioImage, []string{"MINIO_ROOT_USER=" + MinioAccessKey, "MINIO_ROOT_PASSWORD=" + MinioSecretKey}, "server", "/data")
+	addr, stop, err := run(testcontainers.ContainerRequest{
+		Image:        MinioImage,
+		ExposedPorts: []string{"9000/tcp"},
+		Env:          map[string]string{"MINIO_ROOT_USER": MinioAccessKey, "MINIO_ROOT_PASSWORD": MinioSecretKey},
+		Cmd:          []string{"server", "/data"},
+		WaitingFor:   wait.ForListeningPort("9000/tcp").WithStartupTimeout(60 * time.Second),
+	}, "9000/tcp")
 	if err != nil {
 		return "", nil, err
 	}

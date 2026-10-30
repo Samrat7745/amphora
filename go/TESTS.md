@@ -106,9 +106,9 @@ internal/model/entities_test.go:
 
 ## Part B - persistence, storage service, client
 
-Java test class / group -> Go test that covers it. Container based tests use plain `docker run`
+Java test class / group -> Go test that covers it. Container based tests use testcontainers-go
 containers (postgres:11.1 like `ReusablePostgreSQLContainer`, redis:7.0, minio RELEASE.2022-04-16)
-started lazily per package by `internal/testkit/docker.go` (names `ampB-*`, removed in `TestMain`);
+started lazily per package by `internal/testkit/docker.go` (terminated in `TestMain`; testcontainers' reaper removes them if the run is aborted);
 they SKIP when docker is unavailable. The Java Mockito tests assert on interactions with mocked
 repositories/clients; in Go the real stores are used and the same facts are asserted on the observable
 result (rows, objects, keys, error kind and message). OPA is an httptest server that records each

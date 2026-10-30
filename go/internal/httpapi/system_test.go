@@ -1,7 +1,7 @@
 package httpapi
 
 // Port of AmphoraServiceSystemTest. The Go service runs in-process behind httptest with the real
-// Postgres/Redis/Minio stores (plain `docker run`, containers named ampA-*; the tests skip when
+// Postgres/Redis/Minio stores (testcontainers-go via internal/testkit; the tests skip when
 // docker is unavailable) and a fake OPA that allows the authorized user (the Java test mocks
 // OpaClient.isAllowed the same way).
 
@@ -12,12 +12,10 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -30,21 +28,18 @@ import (
 	"github.com/carbynestack/amphora-go/internal/pgstore"
 	"github.com/carbynestack/amphora-go/internal/rediscache"
 	"github.com/carbynestack/amphora-go/internal/service"
+	"github.com/carbynestack/amphora-go/internal/testkit"
 	"github.com/carbynestack/amphora-go/spdz"
-	"github.com/jackc/pgx/v5"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/redis/go-redis/v9"
 )
 
-// ---- plain-docker containers (prefix ampA-) ----
+// ---- containers (internal/testkit, testcontainers-go) ----
 
 const (
-	sysPostgresImage = "postgres:16-alpine"
-	sysRedisImage    = "redis:7-alpine"
-	sysMinioImage    = "quay.io/minio/minio:RELEASE.2022-04-16T04-26-02Z"
-	minioKey         = "dummy-key"
-	minioSecret      = "dummy-secret"
+	minioKey    = testkit.MinioAccessKey
+	minioSecret = testkit.MinioSecretKey
 )
 
 var (
@@ -53,7 +48,6 @@ var (
 	sysInfra      *infra
 	sysInfraErr   error
 	sysInfraReady bool
-	sysSeq        int
 )
 
 func TestMain(m *testing.M) {
@@ -64,40 +58,6 @@ func TestMain(m *testing.M) {
 	}
 	sysMu.Unlock()
 	os.Exit(code)
-}
-
-func dockerCmd(args ...string) (string, error) {
-	out, err := exec.Command("docker", args...).CombinedOutput()
-	return strings.TrimSpace(string(out)), err
-}
-
-func dockerAvailable() bool {
-	if _, err := exec.LookPath("docker"); err != nil {
-		return false
-	}
-	return exec.Command("docker", "info", "--format", "{{.ServerVersion}}").Run() == nil
-}
-
-// runContainer starts a container publishing port on a random loopback port and registers its removal.
-func runContainer(kind string, port int, image string, env []string, cmd ...string) (string, error) {
-	sysSeq++
-	name := fmt.Sprintf("ampA-%s-%d-%d", kind, os.Getpid(), sysSeq)
-	args := []string{"run", "-d", "--name", name, "-p", fmt.Sprintf("127.0.0.1::%d", port)}
-	for _, e := range env {
-		args = append(args, "-e", e)
-	}
-	args = append(append(args, image), cmd...)
-	stop := func() { _, _ = dockerCmd("rm", "-f", "-v", name) }
-	sysStops = append(sysStops, stop)
-	if out, err := dockerCmd(args...); err != nil {
-		return "", fmt.Errorf("docker run %s: %v: %s", image, err, out)
-	}
-	out, err := dockerCmd("port", name, fmt.Sprintf("%d/tcp", port))
-	if err != nil {
-		return "", fmt.Errorf("docker port: %v: %s", err, out)
-	}
-	addr := strings.Split(out, "\n")[0]
-	return "127.0.0.1" + addr[strings.LastIndex(addr, ":"):], nil
 }
 
 func waitFor(d time.Duration, what string, ready func() bool) error {
@@ -120,51 +80,24 @@ type infra struct {
 }
 
 func startInfra() (*infra, error) {
-	if !dockerAvailable() {
+	if !testkit.DockerAvailable() {
 		return nil, fmt.Errorf("docker is not available")
 	}
-	pgAddr, err := runContainer("pg", 5432, sysPostgresImage, []string{"POSTGRES_PASSWORD=pw", "POSTGRES_USER=amphora", "POSTGRES_DB=amphora"})
+	dsn, stop, err := testkit.StartPostgres()
 	if err != nil {
 		return nil, err
 	}
-	redisAddr, err := runContainer("redis", 6379, sysRedisImage, nil)
+	sysStops = append(sysStops, stop)
+	redisAddr, stop, err := testkit.StartRedis()
 	if err != nil {
 		return nil, err
 	}
-	minioAddr, err := runContainer("minio", 9000, sysMinioImage, []string{"MINIO_ROOT_USER=" + minioKey, "MINIO_ROOT_PASSWORD=" + minioSecret}, "server", "/data")
+	sysStops = append(sysStops, stop)
+	minioAddr, stop, err := testkit.StartMinio()
 	if err != nil {
 		return nil, err
 	}
-	dsn := "postgres://amphora:pw@" + pgAddr + "/amphora?sslmode=disable"
-	okRuns := 0
-	if err := waitFor(90*time.Second, "postgres", func() bool { // the image restarts the server once after init
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		c, err := pgx.Connect(ctx, dsn)
-		if err != nil {
-			okRuns = 0
-			return false
-		}
-		defer c.Close(context.Background())
-		var one int
-		if c.QueryRow(ctx, "SELECT 1").Scan(&one) != nil {
-			okRuns = 0
-			return false
-		}
-		okRuns++
-		return okRuns >= 2
-	}); err != nil {
-		return nil, err
-	}
-	if err := waitFor(30*time.Second, "redis", func() bool {
-		c, err := net.DialTimeout("tcp", redisAddr, time.Second)
-		if err == nil {
-			_ = c.Close()
-		}
-		return err == nil
-	}); err != nil {
-		return nil, err
-	}
+	sysStops = append(sysStops, stop)
 	mc, err := minio.New(minioAddr, &minio.Options{Creds: credentials.NewStaticV4(minioKey, minioSecret, "")})
 	if err != nil {
 		return nil, err

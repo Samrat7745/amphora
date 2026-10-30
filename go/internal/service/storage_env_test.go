@@ -32,7 +32,7 @@ import (
 // Test environment for the StorageService ports (StorageServiceTest, StorageIT,
 // FilterPagingAndNestedSortingIT, InputMask/ODO caching tests). The Java tests mock the Spring
 // repositories, the Minio client, Redis and the OPA service; here the real Postgres/MinIO/Redis
-// (plain docker containers) are used and OPA is an httptest server that records every evaluation.
+// (testcontainers-go containers) are used and OPA is an httptest server that records every evaluation.
 
 var (
 	pgC    = testkit.NewLazy(testkit.StartPostgres)
