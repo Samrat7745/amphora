@@ -17,7 +17,7 @@ import (
 	"github.com/carbynestack/amphora-go/internal/opa"
 	"github.com/carbynestack/amphora-go/internal/pgstore"
 	"github.com/carbynestack/amphora-go/internal/rediscache"
-	"github.com/carbynestack/amphora-go/internal/spdz"
+	"github.com/carbynestack/amphora-go/spdz"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 

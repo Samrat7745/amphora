@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/carbynestack/amphora-go/internal/model"
-	"github.com/carbynestack/amphora-go/internal/spdz"
+	"github.com/carbynestack/amphora-go/spdz"
 )
 
 // Config describes one flow run.

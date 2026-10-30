@@ -23,7 +23,7 @@ import (
 	"github.com/carbynestack/amphora-go/internal/pgstore"
 	"github.com/carbynestack/amphora-go/internal/rediscache"
 	"github.com/carbynestack/amphora-go/internal/service"
-	"github.com/carbynestack/amphora-go/internal/spdz"
+	"github.com/carbynestack/amphora-go/spdz"
 	"github.com/redis/go-redis/v9"
 )
 

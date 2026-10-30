@@ -12,7 +12,7 @@ import (
 
 	"github.com/carbynestack/amphora-go/internal/castor"
 	"github.com/carbynestack/amphora-go/internal/model"
-	"github.com/carbynestack/amphora-go/internal/spdz"
+	"github.com/carbynestack/amphora-go/spdz"
 )
 
 // TupleSource downloads tuple shares from Castor.

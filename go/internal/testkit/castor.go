@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/carbynestack/amphora-go/internal/javaser"
-	"github.com/carbynestack/amphora-go/internal/spdz"
+	"github.com/carbynestack/amphora-go/spdz"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
