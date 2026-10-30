@@ -3,9 +3,11 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -27,6 +29,9 @@ type intra struct {
 
 // NewIntraVcpClient builds a client for the first address in o.ServiceAddresses.
 func NewIntraVcpClient(o Options) (IntraVcpClient, error) {
+	if len(o.ServiceAddresses) == 0 {
+		return nil, errors.New("Service URI must not be null.")
+	}
 	b, err := newBase(o)
 	if err != nil {
 		return nil, err
@@ -55,11 +60,11 @@ func (c *intra) UploadSecretShare(ctx context.Context, s SecretShare) (uuid.UUID
 func (c *intra) GetSecretShare(ctx context.Context, id uuid.UUID) (*SecretShare, error) {
 	r := c.do(ctx, "GET", c.addrs[0], "/intra-vcp/secret-shares/"+id.String(), nil, nil, false)
 	if r.err != nil {
-		return nil, &ClientError{fmt.Sprintf("Fetching SecretShare %s failed", id), r.err}
+		return nil, &ClientError{fmt.Sprintf("Fetching secret #%s failed", id), r.err}
 	}
 	var sj shareJSON
 	if err := json.Unmarshal(r.body, &sj); err != nil {
-		return nil, &ClientError{fmt.Sprintf("Fetching SecretShare %s failed", id), err}
+		return nil, &ClientError{fmt.Sprintf("Fetching secret #%s failed", id), err}
 	}
 	sid, err := uuid.Parse(sj.SecretID)
 	if err != nil {
@@ -72,6 +77,9 @@ type inter struct{ *base }
 
 // NewInterVcpClient builds a client that broadcasts to every address in o.ServiceAddresses.
 func NewInterVcpClient(o Options) (InterVcpClient, error) {
+	if len(o.ServiceAddresses) == 0 {
+		return nil, errors.New("At least one amphora service URI needs to be defined.")
+	}
 	b, err := newBase(o)
 	if err != nil {
 		return nil, err
@@ -83,13 +91,22 @@ func bigNumber(v *big.Int) json.RawMessage { return json.RawMessage(v.String()) 
 
 func (c *inter) Open(ctx context.Context, o MultiplicationExchangeObject) error {
 	if o.OperationID == uuid.Nil {
-		return fmt.Errorf("operation id must not be omitted")
+		return errors.New("OperationId must not be null")
 	}
 	pairs := make([]map[string]json.RawMessage, len(o.InterimValues))
 	for i, p := range o.InterimValues {
 		pairs[i] = map[string]json.RawMessage{"a": bigNumber(p.A), "b": bigNumber(p.B)}
 	}
 	body := map[string]any{"operationId": o.OperationID.String(), "playerId": o.PlayerID, "interimValues": pairs}
-	_, err := c.all(ctx, "POST", "/inter-vcp/open", url.Values{}, body)
-	return err
+	res, _ := c.all(ctx, failAtLeastOne, "POST", "/inter-vcp/open", url.Values{}, body)
+	var lines []string
+	for i, r := range res {
+		if r.err != nil {
+			lines = append(lines, fmt.Sprintf("Request for endpoint \"%s\" has failed: %s", c.addrs[i], r.err))
+		}
+	}
+	if len(lines) > 0 {
+		return &ClientError{AtLeastOneFailedPrefix + strings.Join(lines, "\n\t"), nil}
+	}
+	return nil
 }

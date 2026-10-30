@@ -19,6 +19,8 @@ import (
 //	AMPHORA_URLS=http://127.0.0.1:11000,http://127.0.0.1:11001 CASTOR_URLS=http://127.0.0.1:12100,http://127.0.0.1:12101 \
 //	  go test -tags integration -run TestLive ./client
 //
+// Needs a Castor pair without leftover tuples from other suites: the parity harness uploads tuples that are not
+// consistent across the two parties, and masks drawn from those make the (correct) integrity check fail. Use a fresh rig.
 // JAVA_ORACLE=1 tolerates the Java service's known always-failing tag overwrite (PUT /tags).
 func TestLive(t *testing.T) {
 	amphoras, castors := os.Getenv("AMPHORA_URLS"), os.Getenv("CASTOR_URLS")

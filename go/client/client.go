@@ -22,10 +22,27 @@ import (
 
 // Messages mirror DefaultAmphoraClient.
 const (
-	FetchingTagWithKeyFailed    = "Fetching tag with key %s for secret %s failed"
-	FetchingTagsFailed          = "Fetching tags for secret %s failed"
+	FetchingTagWithKeyFailed    = "Fetching tag with key \"%s\" for secret #%s failed"
+	FetchingTagsFailed          = "Fetching tags for secret #%s failed"
 	FetchingSecretMetadataFails = "Fetching secret metadata failed"
-	RequestForEndpointFailed    = "Request for endpoint %s failed: %s"
+	RequestForEndpointFailed    = "Request for endpoint \"%s\" failed: %s"
+
+	// CreateFailedPrefix starts the error of createSecret/createTag when a service rejects the request.
+	CreateFailedPrefix = "Secret could not be created due to http errors returned by the following providers: "
+	// AtLeastOneFailedPrefix starts the error of update/delete requests with failing services.
+	AtLeastOneFailedPrefix = "At least one request has failed:\n\t"
+	// ResponsesFailedPrefix starts the error of download requests with failing services.
+	ResponsesFailedPrefix = "Error(s) occurred while processing responses:\n\t"
+)
+
+// failMode selects how failures of a request to all services are reported (Java: checkSuccess and
+// the two unwrap variants of DefaultAmphoraClient).
+type failMode int
+
+const (
+	failCheck      failMode = iota // checkSuccess: one line per failed endpoint
+	failAtLeastOne                 // unwrap(List<Try>)
+	failResponses                  // unwrap(Map<URI, Try>)
 )
 
 // ClientError is Java's AmphoraClientException.
@@ -70,7 +87,7 @@ type base struct {
 
 func newBase(o Options) (*base, error) {
 	if len(o.ServiceAddresses) == 0 {
-		return nil, errors.New("Declared service URIs must not be empty")
+		return nil, errors.New("At least one amphora service uri has to be provided.")
 	}
 	var addrs []string
 	for _, a := range o.ServiceAddresses {
@@ -90,10 +107,10 @@ func newBase(o Options) (*base, error) {
 	for _, p := range o.TrustedCertificates {
 		pem, err := os.ReadFile(p)
 		if err != nil {
-			return nil, &ClientError{"Failed to create client", err}
+			return nil, &ClientError{"Failed to create AmphoraCommunicationClient.", err}
 		}
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, &ClientError{"Failed to create client", fmt.Errorf("no certificates in %s", p)}
+			return nil, &ClientError{"Failed to create AmphoraCommunicationClient.", fmt.Errorf("no certificates in %s", p)}
 		}
 	}
 	to := o.Timeout
@@ -102,6 +119,32 @@ func newBase(o Options) (*base, error) {
 	}
 	return &base{opt: o, addrs: addrs, http: &http.Client{Timeout: to, Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{RootCAs: pool, InsecureSkipVerify: o.NoSSLValidation}, MaxIdleConnsPerHost: 8}}}, nil
+}
+
+// queryOrder is the order in which the Java client appends its query parameters; others follow sorted.
+var queryOrder = []string{"requestId", "count", "filter", "pageNumber", "pageSize", "sort", "dir"}
+
+func encodeQuery(q url.Values) string {
+	var parts []string
+	seen := map[string]bool{}
+	for _, k := range queryOrder {
+		if v, ok := q[k]; ok {
+			seen[k] = true
+			for _, x := range v {
+				parts = append(parts, url.QueryEscape(k)+"="+url.QueryEscape(x))
+			}
+		}
+	}
+	rest := url.Values{}
+	for k, v := range q {
+		if !seen[k] {
+			rest[k] = v
+		}
+	}
+	if len(rest) > 0 {
+		parts = append(parts, rest.Encode())
+	}
+	return strings.Join(parts, "&")
 }
 
 type result struct {
@@ -113,7 +156,7 @@ type result struct {
 func (b *base) do(ctx context.Context, method, addr, path string, query url.Values, body any, auth bool) result {
 	u := addr + path
 	if len(query) > 0 {
-		u += "?" + query.Encode()
+		u += "?" + encodeQuery(query)
 	}
 	var rd io.Reader
 	if body != nil {
@@ -148,7 +191,7 @@ func (b *base) do(ctx context.Context, method, addr, path string, query url.Valu
 }
 
 // all runs the request against every service in parallel and returns the results in service order.
-func (b *base) all(ctx context.Context, method, path string, query url.Values, body any) ([]result, error) {
+func (b *base) all(ctx context.Context, mode failMode, method, path string, query url.Values, body any) ([]result, error) {
 	res := make([]result, len(b.addrs))
 	var wg sync.WaitGroup
 	for i, a := range b.addrs {
@@ -159,29 +202,55 @@ func (b *base) all(ctx context.Context, method, path string, query url.Values, b
 		}(i, a)
 	}
 	wg.Wait()
-	return res, joinErrors(b.addrs, res)
+	return res, joinErrors(b.addrs, res, mode)
 }
 
-func joinErrors(addrs []string, res []result) error {
-	var msgs []string
+func joinErrors(addrs []string, res []result, mode failMode) error {
+	var lines []string
 	var first error
 	for i, r := range res {
-		if r.err != nil {
-			msgs = append(msgs, fmt.Sprintf(RequestForEndpointFailed, addrs[i], r.err.Error()))
-			if first == nil {
-				first = r.err
-			}
+		if r.err == nil {
+			continue
+		}
+		if first == nil {
+			first = r.err
+		}
+		switch mode {
+		case failCheck:
+			lines = append(lines, fmt.Sprintf(RequestForEndpointFailed, addrs[i], r.err.Error()))
+		default:
+			lines = append(lines, r.err.Error())
 		}
 	}
-	if len(msgs) == 0 {
+	if len(lines) == 0 {
 		return nil
 	}
-	return &ClientError{strings.Join(msgs, "\n\t"), first}
+	switch mode {
+	case failCheck:
+		return &ClientError{CreateFailedPrefix + "\n\t" + strings.Join(lines, "\n\t"), first}
+	case failResponses:
+		return &ClientError{ResponsesFailedPrefix + strings.Join(lines, "\n\t"), first}
+	}
+	return &ClientError{AtLeastOneFailedPrefix + strings.Join(lines, "\n\t"), first}
+}
+
+// checkFieldParams is the mandatory configuration of the user facing client (builder.build()).
+func checkFieldParams(o Options) error {
+	if o.Prime == nil {
+		return errors.New("Prime must not be null")
+	}
+	if o.R == nil {
+		return errors.New("Auxiliary modulus R must not be null")
+	}
+	if o.RInv == nil {
+		return errors.New("Multiplicative inverse for the auxiliary modulus R must not be null")
+	}
+	return nil
 }
 
 func (b *base) spdz() (*spdz.Utils, error) {
-	if b.opt.Prime == nil || b.opt.R == nil || b.opt.RInv == nil {
-		return nil, &ClientError{Msg: "Prime, R and RInv must be set to handle secret data"}
+	if err := checkFieldParams(b.opt); err != nil {
+		return nil, &ClientError{Msg: err.Error()}
 	}
 	return spdz.New(b.opt.Prime, b.opt.R, b.opt.RInv), nil
 }

@@ -41,6 +41,18 @@ type Config struct {
 	JavaTagReplaceBug bool
 }
 
+// InvalidBigIntegerMsg is BigIntegerConverter.INVALID_VALUE_EXCEPTION_MSG.
+const InvalidBigIntegerMsg = "Invalid value \"%s\" for type BigInteger"
+
+// ParseBigInteger is BigIntegerConverter.convert: empty or malformed input is an error.
+func ParseBigInteger(s string) (*big.Int, error) {
+	v, ok := new(big.Int).SetString(s, 10)
+	if !ok || s == "" {
+		return nil, fmt.Errorf(InvalidBigIntegerMsg, s)
+	}
+	return v, nil
+}
+
 // Getenv abstracts os.Getenv for tests.
 type Getenv func(string) string
 
@@ -82,10 +94,9 @@ func LoadFrom(get Getenv) (*Config, error) {
 		return v
 	}
 	bigint := func(k string) *big.Int {
-		s := get(k)
-		v, ok := new(big.Int).SetString(s, 10)
-		if !ok {
-			fail(fmt.Errorf("Invalid value %q for type BigInteger (%s)", s, k))
+		v, e := ParseBigInteger(get(k))
+		if e != nil {
+			fail(fmt.Errorf("%s: %w", k, e))
 			return new(big.Int)
 		}
 		return v

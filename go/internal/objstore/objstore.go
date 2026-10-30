@@ -12,6 +12,16 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
+// FailedInitializingMsg is the message of the error returned when the bucket cannot be checked or
+// created (Java: AmphoraServiceException with the underlying exception as cause).
+const FailedInitializingMsg = "Failed initializing MinoSecretShareDataStore."
+
+// InitError wraps the cause of a failed initialisation.
+type InitError struct{ Cause error }
+
+func (e *InitError) Error() string { return FailedInitializingMsg }
+func (e *InitError) Unwrap() error { return e.Cause }
+
 // Store is the Minio-backed share store.
 type Store struct {
 	client *minio.Client
@@ -35,11 +45,11 @@ func New(ctx context.Context, endpoint, bucket, accessKey, secretKey string) (*S
 	s := &Store{client: c, bucket: bucket}
 	ok, err := c.BucketExists(ctx, bucket)
 	if err != nil {
-		return nil, err
+		return nil, &InitError{err}
 	}
 	if !ok {
 		if err := c.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
-			return nil, err
+			return nil, &InitError{err}
 		}
 	}
 	return s, nil

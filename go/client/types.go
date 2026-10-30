@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"math/big"
 
 	"github.com/google/uuid"
@@ -17,6 +18,19 @@ type Tag struct {
 	Key       string `json:"key"`
 	Value     string `json:"value"`
 	ValueType string `json:"valueType,omitempty"`
+}
+
+// MarshalJSON always sends the value type (Java: Tag.valueType defaults to STRING).
+func (t Tag) MarshalJSON() ([]byte, error) {
+	vt := t.ValueType
+	if vt == "" {
+		vt = TagString
+	}
+	return json.Marshal(struct {
+		Key       string `json:"key"`
+		Value     string `json:"value"`
+		ValueType string `json:"valueType"`
+	}{t.Key, t.Value, vt})
 }
 
 // Metadata describes a secret.

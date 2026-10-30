@@ -56,6 +56,9 @@ func (c *Client) Allowed(ctx context.Context, subject, action string, tags []mod
 	if subject == "" {
 		return false, model.Internal("Subject is required to evaluate the policy")
 	}
+	if action == "" {
+		return false, model.Internal("Action is required to evaluate the policy")
+	}
 	pkg := c.defaultPackage
 	for _, t := range tags {
 		if t.Key == PolicyPackageTagKey {

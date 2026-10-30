@@ -205,6 +205,9 @@ func (s *Store) DeleteTagRow(ctx context.Context, q Querier, rowID int32) error 
 
 // DeleteTags removes all tags of a secret except the given row ids.
 func (s *Store) DeleteTags(ctx context.Context, q Querier, id string, keepRows []int32) error {
+	if keepRows == nil {
+		keepRows = []int32{} // a nil slice is sent as NULL and "NOT (id = ANY(NULL))" matches no row
+	}
 	_, err := q.Exec(ctx, "DELETE FROM secret_tags WHERE secret = $1 AND NOT (id = ANY($2))", id, keepRows)
 	return err
 }

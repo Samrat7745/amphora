@@ -22,6 +22,12 @@ func params() *spdz.Utils {
 	return spdz.New(p, r, ri)
 }
 
+// opts are the options of a client for the given services (field parameters are mandatory).
+func opts(addrs ...string) Options {
+	sp := params()
+	return Options{ServiceAddresses: addrs, Prime: sp.Prime, R: sp.R, RInv: sp.RInv}
+}
+
 func rnd(p *big.Int) *big.Int { v, _ := rand.Int(rand.Reader, p); return v }
 
 func split(p, v *big.Int, n int) []*big.Int {
@@ -94,7 +100,7 @@ func TestFilterAndSortEncoding(t *testing.T) {
 		_, _ = w.Write([]byte(`{"content":[{"secretId":"` + uuid.NewString() + `","tags":[{"key":"k","value":"v","valueType":"STRING"}]}],"number":1,"size":5,"totalElements":6,"totalPages":2}`))
 	}))
 	defer srv.Close()
-	c, _ := New(Options{ServiceAddresses: []string{srv.URL}})
+	c, _ := New(opts(srv.URL))
 	ms, err := c.GetSecrets(context.Background(), []TagFilter{{"rank", OpLessThan, "5"}}, &Sort{"rank", true})
 	if err != nil || len(ms) != 1 || ms[0].Tags[0].Key != "k" {
 		t.Fatal(err, ms)
@@ -130,7 +136,7 @@ func TestTagCallsAndErrorAggregation(t *testing.T) {
 	defer ok.Close()
 	defer bad.Close()
 	id := uuid.New()
-	c, _ := New(Options{ServiceAddresses: []string{ok.URL, ok.URL}})
+	c, _ := New(opts(ok.URL, ok.URL))
 	if err := c.CreateTag(context.Background(), id, Tag{"a", "1", TagLong}); err != nil {
 		t.Fatal(err)
 	}
@@ -141,10 +147,10 @@ func TestTagCallsAndErrorAggregation(t *testing.T) {
 	if err != nil || tags[0].ValueType != TagLong {
 		t.Fatal(err, tags)
 	}
-	c2, _ := New(Options{ServiceAddresses: []string{ok.URL, bad.URL}})
+	c2, _ := New(opts(ok.URL, bad.URL))
 	err = c2.OverwriteTags(context.Background(), id, nil)
 	ce, isCE := err.(*ClientError)
-	if !isCE || !strings.Contains(ce.Msg, "Request for endpoint "+bad.URL+" failed") || !strings.Contains(ce.Msg, "403") {
+	if !isCE || !strings.HasPrefix(ce.Msg, AtLeastOneFailedPrefix) || !strings.Contains(ce.Msg, "403") {
 		t.Fatalf("aggregated error %v", err)
 	}
 	found := false
@@ -194,8 +200,7 @@ func TestOptionsValidation(t *testing.T) {
 	if _, err := New(Options{}); err == nil {
 		t.Fatal("empty addresses must fail")
 	}
-	c, _ := New(Options{ServiceAddresses: []string{"http://127.0.0.1:1"}})
-	if _, err := c.CreateSecret(context.Background(), NewSecret(nil, []*big.Int{big.NewInt(1)})); err == nil || !strings.Contains(err.Error(), "Prime") {
+	if _, err := New(Options{ServiceAddresses: []string{"http://127.0.0.1:1"}}); err == nil || err.Error() != "Prime must not be null" {
 		t.Fatalf("missing field params must be reported: %v", err)
 	}
 }

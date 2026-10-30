@@ -29,9 +29,36 @@ type HealthCheck func(ctx context.Context) error
 // Info is the static /actuator/info content (values are rendered verbatim).
 type Info map[string]string
 
+// Backend is the business logic the controllers delegate to (implemented by *service.Service).
+type Backend interface {
+	List(ctx context.Context, p pgstore.ListParams) (model.MetadataPage, error)
+	GetSecretShare(ctx context.Context, id, userID string) (*model.SecretShare, error)
+	DeleteSecret(ctx context.Context, id, userID string) error
+	RetrieveTags(ctx context.Context, id, userID string) ([]model.Tag, error)
+	StoreTag(ctx context.Context, id string, tag model.Tag, userID string) (string, error)
+	ReplaceTags(ctx context.Context, id string, tags []model.Tag, userID string) error
+	RetrieveTag(ctx context.Context, id, key, userID string) (model.Tag, error)
+	UpdateTag(ctx context.Context, id string, tag model.Tag, userID string) error
+	DeleteTag(ctx context.Context, id, key, userID string) error
+	CreateSecret(ctx context.Context, mi *model.MaskedInput, userID string) (string, error)
+	InputMasks(ctx context.Context, requestID string, count int64) (model.OutputDeliveryObject, error)
+	StoreSecretShare(ctx context.Context, share *model.SecretShare) (string, error)
+	UseSecretShare(ctx context.Context, id, programID string) (*model.SecretShare, error)
+	PutInterim(ctx context.Context, e model.ExchangeObject) error
+}
+
+// OutputDelivery computes the output delivery object of a secret share (Java OutputDeliveryService).
+type OutputDelivery interface {
+	ComputeFromSecretShareData(ctx context.Context, data []byte, requestID string) (model.OutputDeliveryObject, error)
+}
+
+var _ Backend = (*service.Service)(nil)
+
 // API wires the HTTP layer.
 type API struct {
-	Svc    *service.Service
+	Svc Backend
+	// ODO defaults to Svc's ODO when Svc is a *service.Service.
+	ODO    OutputDelivery
 	JWT    jwt.Reader
 	Checks []HealthCheck
 	Info   Info
@@ -481,12 +508,19 @@ func (a *API) getSecret(w http.ResponseWriter, r *http.Request, rawID string) {
 		a.writeError(w, err)
 		return
 	}
-	odo, err := a.Svc.ODO.ComputeFromSecretShareData(r.Context(), share.Data, rid)
+	odo, err := a.outputDelivery().ComputeFromSecretShareData(r.Context(), share.Data, rid)
 	if err != nil {
 		a.writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, model.VerifiableSecretShareJSON(*share, odo))
+}
+
+func (a *API) outputDelivery() OutputDelivery {
+	if a.ODO != nil {
+		return a.ODO
+	}
+	return a.Svc.(*service.Service).ODO
 }
 
 func (a *API) deleteSecret(w http.ResponseWriter, r *http.Request, rawID string) {

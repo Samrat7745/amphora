@@ -35,6 +35,9 @@ type amphora struct{ *base }
 
 // New creates the client for the parties in o.ServiceAddresses.
 func New(o Options) (Client, error) {
+	if err := checkFieldParams(o); err != nil {
+		return nil, err
+	}
 	b, err := newBase(o)
 	if err != nil {
 		return nil, err
@@ -126,7 +129,10 @@ func verify(sp *spdz.Utils, odos []odo) ([]*big.Int, error) {
 		w := new(big.Int).Mod(new(big.Int).Mul(secrets[i], rs[i]), sp.Prime)
 		u := new(big.Int).Mod(new(big.Int).Mul(vs[i], rs[i]), sp.Prime)
 		if w.Cmp(ws[i]) != 0 || u.Cmp(us[i]) != 0 {
-			return nil, &IntegrityError{fmt.Sprintf("Verification of output delivery object failed for element %d", i)}
+			return nil, &IntegrityError{fmt.Sprintf("Verification of secret has failed:\n"+
+				"\t%s = %s * %s   &&   %s = %s * %s\n"+
+				"\t%s = %s   &&   %s = %s",
+				ws[i], secrets[i], rs[i], us[i], vs[i], rs[i], ws[i], w, us[i], u)}
 		}
 	}
 	return secrets, nil
@@ -138,7 +144,7 @@ func (c *amphora) CreateSecret(ctx context.Context, s Secret) (uuid.UUID, error)
 		return uuid.Nil, err
 	}
 	q := url.Values{"requestId": {s.SecretID.String()}, "count": {strconv.Itoa(len(s.Data))}}
-	res, err := c.all(ctx, "GET", "/input-masks", q, nil)
+	res, err := c.all(ctx, failResponses, "GET", "/input-masks", q, nil)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -172,7 +178,7 @@ func (c *amphora) CreateSecret(ctx context.Context, s Secret) (uuid.UUID, error)
 		tags = []Tag{}
 	}
 	body := map[string]any{"secretId": s.SecretID.String(), "data": data, "tags": tags}
-	if _, err := c.all(ctx, "POST", "/masked-inputs", nil, body); err != nil {
+	if _, err := c.all(ctx, failCheck, "POST", "/masked-inputs", nil, body); err != nil {
 		return uuid.Nil, err
 	}
 	return s.SecretID, nil
@@ -184,7 +190,7 @@ func (c *amphora) GetSecret(ctx context.Context, id uuid.UUID) (*Secret, error) 
 		return nil, err
 	}
 	rid := uuid.New()
-	res, err := c.all(ctx, "GET", "/secret-shares/"+id.String(), url.Values{"requestId": {rid.String()}}, nil)
+	res, err := c.all(ctx, failResponses, "GET", "/secret-shares/"+id.String(), url.Values{"requestId": {rid.String()}}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +210,7 @@ func (c *amphora) GetSecret(ctx context.Context, id uuid.UUID) (*Secret, error) 
 }
 
 func (c *amphora) DeleteSecret(ctx context.Context, id uuid.UUID) error {
-	_, err := c.all(ctx, "DELETE", "/secret-shares/"+id.String(), nil, nil)
+	_, err := c.all(ctx, failAtLeastOne, "DELETE", "/secret-shares/"+id.String(), nil, nil)
 	return err
 }
 
@@ -283,7 +289,7 @@ func (c *amphora) GetTags(ctx context.Context, id uuid.UUID) ([]Tag, error) {
 }
 
 func (c *amphora) CreateTag(ctx context.Context, id uuid.UUID, t Tag) error {
-	_, err := c.all(ctx, "POST", "/secret-shares/"+id.String()+"/tags", nil, t)
+	_, err := c.all(ctx, failCheck, "POST", "/secret-shares/"+id.String()+"/tags", nil, t)
 	return err
 }
 
@@ -291,7 +297,7 @@ func (c *amphora) OverwriteTags(ctx context.Context, id uuid.UUID, tags []Tag) e
 	if tags == nil {
 		tags = []Tag{}
 	}
-	_, err := c.all(ctx, "PUT", "/secret-shares/"+id.String()+"/tags", nil, tags)
+	_, err := c.all(ctx, failAtLeastOne, "PUT", "/secret-shares/"+id.String()+"/tags", nil, tags)
 	return err
 }
 
@@ -312,11 +318,11 @@ func (c *amphora) GetTag(ctx context.Context, id uuid.UUID, key string) (*Tag, e
 }
 
 func (c *amphora) UpdateTag(ctx context.Context, id uuid.UUID, t Tag) error {
-	_, err := c.all(ctx, "PUT", tagPath(id, t.Key), nil, t)
+	_, err := c.all(ctx, failAtLeastOne, "PUT", tagPath(id, t.Key), nil, t)
 	return err
 }
 
 func (c *amphora) DeleteTag(ctx context.Context, id uuid.UUID, key string) error {
-	_, err := c.all(ctx, "DELETE", tagPath(id, key), nil, nil)
+	_, err := c.all(ctx, failAtLeastOne, "DELETE", tagPath(id, key), nil, nil)
 	return err
 }
