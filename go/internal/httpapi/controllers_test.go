@@ -39,6 +39,7 @@ type fakeBackend struct {
 	createdID  string
 	odo        model.OutputDeliveryObject
 	storeShare string
+	useErr     error // returned by UseSecretShare
 }
 
 func (f *fakeBackend) rec(name string, a ...any) {
@@ -96,6 +97,9 @@ func (f *fakeBackend) StoreSecretShare(_ context.Context, s *model.SecretShare) 
 }
 func (f *fakeBackend) UseSecretShare(_ context.Context, id, program string) (*model.SecretShare, error) {
 	f.rec("UseSecretShare", id, program)
+	if f.useErr != nil {
+		return nil, f.useErr
+	}
 	return f.secret, nil
 }
 func (f *fakeBackend) PutInterim(_ context.Context, e model.ExchangeObject) error {
@@ -262,9 +266,18 @@ func TestIntraVcpController(t *testing.T) {
 	t.Run("givenMissingProgramId_whenDownloadSecretShare_thenReject", func(t *testing.T) {
 		f := &fakeBackend{}
 		wantResp(t, call(newAPI(f, nil), "GET", "/intra-vcp/secret-shares/"+testSecretID, "", nil), 400, "")
-		wantResp(t, call(newAPI(f, nil), "GET", "/intra-vcp/secret-shares/"+testSecretID+"?programId=", "", nil), 400, "")
 		if f.called("UseSecretShare") {
 			t.Fatal("backend must not be called")
+		}
+	})
+	// Java: @RequestParam String binds "" (only a missing parameter is a binding error); the empty program id
+	// reaches the OPA check, which throws "Subject is required to evaluate the policy" -> 500 (fixture
+	// e13_intra_get_empty_programid, recorded from the original Java 8 image).
+	t.Run("givenEmptyProgramId_whenDownloadSecretShare_thenPassOnLikeJava", func(t *testing.T) {
+		f := &fakeBackend{useErr: model.Internal("Subject is required to evaluate the policy")}
+		wantResp(t, call(newAPI(f, nil), "GET", "/intra-vcp/secret-shares/"+testSecretID+"?programId=", "", nil), 500, `"Subject is required to evaluate the policy"`)
+		if got := f.argsOf("UseSecretShare"); !reflect.DeepEqual(got, []any{testSecretID, ""}) {
+			t.Fatal(got)
 		}
 	})
 }

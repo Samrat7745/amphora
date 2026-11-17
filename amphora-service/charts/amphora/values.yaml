@@ -5,7 +5,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 service:
-  annotations: {}
+  annotations: []
   type: ClusterIP
   # port will be overwritten by helmfile
   port: 10000
@@ -34,8 +34,6 @@ amphora:
   openingTimeout: 5000
   noSslValidation: "false"
   trustedCertificates:
-  # Go service only: reproduce the Java defect where PUT /secret-shares/{id}/tags always fails (HTTP 500).
-  compatJavaTagReplaceBug: false
   image:
     registry: ghcr.io
     repository: carbynestack/amphora-service
@@ -57,7 +55,6 @@ amphora:
   db:
     host: "dbms-repl.default.svc.cluster.local"
     port: "5432"
-    name: amphora
     userSecretName: ""
     passwordSecretName: ""
   probes:

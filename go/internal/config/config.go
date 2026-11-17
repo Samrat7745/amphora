@@ -37,7 +37,8 @@ type Config struct {
 	DBPassword, DBName string
 	DBPort             int
 	LogLevel           string
-	// JavaTagReplaceBug (extension COMPAT_JAVA_TAG_REPLACE_BUG) reproduces the always-failing PUT /tags.
+	// JavaTagReplaceBug (extension COMPAT_JAVA_TAG_REPLACE_BUG, default true) reproduces the Java service's
+	// always-failing PUT /tags; set it to false to let PUT /tags replace the tags.
 	JavaTagReplaceBug bool
 }
 
@@ -85,6 +86,14 @@ func LoadFrom(get Getenv) (*Config, error) {
 		}
 		return v
 	}
+	booleanDef := func(k, d string) bool {
+		s := strings.TrimSpace(def(k, d))
+		v, e := strconv.ParseBool(s)
+		if e != nil {
+			fail(fmt.Errorf("invalid %s=%q", k, s))
+		}
+		return v
+	}
 	boolean := func(k string) bool {
 		s := strings.TrimSpace(def(k, "false"))
 		v, e := strconv.ParseBool(s)
@@ -123,7 +132,8 @@ func LoadFrom(get Getenv) (*Config, error) {
 	c.DBName = def("DB_NAME", "amphora") // extension: Java fixes the name to amphora
 	c.DBUser = get("DB_USER")
 	c.DBPassword = get("DB_PASSWORD")
-	c.JavaTagReplaceBug = boolean("COMPAT_JAVA_TAG_REPLACE_BUG")
+	// Default true: behave like the Java service (PUT /secret-shares/{id}/tags always fails with 500).
+	c.JavaTagReplaceBug = booleanDef("COMPAT_JAVA_TAG_REPLACE_BUG", "true")
 	c.LogLevel = strings.ToUpper(def("LOG_LEVEL", "INFO"))
 	if err != nil {
 		return nil, err

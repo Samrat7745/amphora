@@ -145,11 +145,20 @@ func segments(r *http.Request) []string {
 	if p == "" {
 		return nil
 	}
-	parts := strings.Split(p, "/")
-	for i, s := range parts {
-		if u, err := url.PathUnescape(s); err == nil {
-			parts[i] = u
+	// Empty segments are dropped: Spring collapses repeated slashes, and the Istio "/amphora" prefix rewrite
+	// delivers requests as "//input-masks".
+	parts := make([]string, 0, 4)
+	for _, s := range strings.Split(p, "/") {
+		if s == "" {
+			continue
 		}
+		if u, err := url.PathUnescape(s); err == nil {
+			s = u
+		}
+		parts = append(parts, s)
+	}
+	if len(parts) == 0 {
+		return nil
 	}
 	return parts
 }
@@ -850,8 +859,10 @@ func (a *API) intraDownload(w http.ResponseWriter, r *http.Request, rawID string
 		a.writeError(w, err)
 		return
 	}
+	// Like Spring's @RequestParam String: only a missing parameter is a binding error. An empty programId
+	// reaches the OPA check, which fails with "Subject is required to evaluate the policy" (500), as in Java.
 	pid, ok := queryParams(r)["programId"]
-	if !ok || pid == "" {
+	if !ok {
 		a.writeError(w, errBinding)
 		return
 	}

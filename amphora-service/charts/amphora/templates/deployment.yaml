@@ -29,16 +29,6 @@ spec:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.amphora.image.registry }}/{{ .Values.amphora.image.repository }}:{{ .Values.amphora.image.tag }}"
           imagePullPolicy: {{ .Values.amphora.image.pullPolicy }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            runAsUser: 1000
-            capabilities:
-              drop:
-                - ALL
-            seccompProfile:
-              type: RuntimeDefault
           env:
             - name: AMPHORA_VC_PARTNERS
               value: {{ join "," .Values.amphora.vcPartners | quote }}
@@ -86,10 +76,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.amphora.db.passwordSecretName }}
                   key: password
-            - name: DB_NAME
-              value: "{{ .Values.amphora.db.name }}"
-            - name: COMPAT_JAVA_TAG_REPLACE_BUG
-              value: "{{ .Values.amphora.compatJavaTagReplaceBug }}"
             - name: DB_PORT
               value: "{{ .Values.amphora.db.port }}"
             - name: LOG_LEVEL

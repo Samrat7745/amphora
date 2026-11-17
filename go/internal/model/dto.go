@@ -12,58 +12,16 @@ import (
 // SecretShareWidth is value(16) || mac(16).
 const SecretShareWidth = 32
 
-// ParseUUID is java.util.UUID.fromString (including the lenient legacy form); returns the
-// canonical lowercase text.
-func ParseUUID(s string) (string, bool) {
-	if len(s) == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-' {
-		ok := true
-		for i := 0; i < 36; i++ {
-			c := s[i]
-			if i == 8 || i == 13 || i == 18 || i == 23 {
-				continue
-			}
-			if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			return strings.ToLower(s), true
-		}
-	}
-	parts := strings.Split(s, "-")
-	if len(parts) != 5 || len(s) > 36 {
-		return "", false
-	}
-	var v [5]int64
-	for i, p := range parts {
-		if p == "" || strings.ContainsAny(p, "+-") {
-			return "", false
-		}
-		n, err := strconv.ParseInt(p, 16, 64)
-		if err != nil {
-			return "", false
-		}
-		v[i] = n
-	}
-	msb := v[0]
-	msb <<= 16
-	msb |= v[1]
-	msb <<= 16
-	msb |= v[2]
-	lsb := v[3]
-	lsb <<= 48
-	lsb |= v[4]
-	m, l := uint64(msb), uint64(lsb)
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", m>>32, (m>>16)&0xffff, m&0xffff, l>>48, l&0xffffffffffff), true
-}
+// ParseUUID converts a path variable / request parameter like the Java service (Spring's
+// StringToUUIDConverter on Java 8); returns the canonical lower-case text.
+func ParseUUID(s string) (string, bool) { return SpringUUID(s) }
 
 func parseUUIDField(raw json.RawMessage) (string, error) {
 	s, isNil, err := jsonString(raw)
 	if err != nil || isNil {
 		return "", errBind
 	}
-	id, ok := ParseUUID(s)
+	id, ok := JacksonUUID(s) // JSON bodies are bound by Jackson, not by Spring's converter
 	if !ok {
 		return "", errBind
 	}

@@ -33,7 +33,7 @@ docker build -t amphora-service:dev .      # distroless image
 | `REDIS_HOST` / `REDIS_PORT`           |                         | Redis                                                       |
 | `MINIO_ENDPOINT`                      |                         | MinIO endpoint                                              |
 | `NO_SSL_VALIDATION`, `TRUSTED_CERTIFICATES` |                   | TLS towards partners                                        |
-| `COMPAT_JAVA_TAG_REPLACE_BUG`         | `false`                 | See *Differences* below                                     |
+| `COMPAT_JAVA_TAG_REPLACE_BUG`         | `true`                  | Java behaviour for PUT /tags; see below                     |
 | `LOG_LEVEL`                           | `INFO`                  |                                                             |
 
 ## Go client
@@ -66,16 +66,21 @@ migration workspace (`IMPL=go go test` against `scripts/up_go.sh`). The existing
 Java client is verified against the Go service with
 `amphora-java-client/src/test/.../LiveGoServiceIT.java`.
 
-## Differences from the Java service (intentional)
+## Behaviour compared with the Java service
 
-* `PUT /secret-shares/{id}/tags` replaces the tags. The Java service always
-  answers HTTP 500 (a Hibernate `ObjectDeletedException`);
-  `COMPAT_JAVA_TAG_REPLACE_BUG=true` reproduces that for fixture parity.
-* `GET /intra-vcp/secret-shares/{id}?programId=` (empty program id) answers 400,
-  the Java service answers 500 ("Subject is required...").
-* A secret-share upload without `data` answers a generic 500 instead of leaking
-  a Java NullPointerException message.
-* **Authentication is unchanged**: like the Java `JwtReader`, the service reads
-  the user id claim from the bearer token without verifying signature, expiry,
-  issuer or audience. Token validation is expected at the gateway (Istio/Thymus).
-  Do not expose Amphora without it.
+Verified against the ORIGINAL published image (`ghcr.io/carbynestack/amphora-service:0.3.0`, OpenJDK 1.8.0_292):
+all 157 parity fixtures recorded from that image pass with no exceptions (`parity/amphora`, `scripts/up_img.sh`).
+
+* `PUT /secret-shares/{id}/tags` behaves like Java by default: it always fails with HTTP 500
+  (Hibernate `ObjectDeletedException`). `COMPAT_JAVA_TAG_REPLACE_BUG=false` (environment
+  variable; the chart is the original one and does not set it) opts into actually replacing the tags.
+* `GET /intra-vcp/secret-shares/{id}?programId=` (empty program id) answers 500 "Subject is required to evaluate
+  the policy", like Java; a missing `programId` answers 400.
+* A secret-share upload without tags/data answers 500 with body `null`, which is what the Java 8 image returns
+  (the longer NullPointerException text only exists on JDK 15+).
+* UUID path/query values follow Spring + Java 8 `UUID.fromString` and JSON values follow Jackson, exactly
+  (`internal/model/javauuid.go`, cases measured on the image).
+* **Authentication is unchanged**: like the Java `JwtReader`, the service reads the user id claim from the
+  bearer token without verifying signature, expiry, issuer or audience. Token validation is expected at the
+  gateway (Istio/Thymus). Do not expose Amphora without it.
+* `DB_NAME` is configurable (extension; default `amphora` as in Java). Log format differs (structured `slog`).

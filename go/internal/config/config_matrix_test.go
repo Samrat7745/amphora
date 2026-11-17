@@ -124,7 +124,7 @@ func TestDefaultValues(t *testing.T) {
 	}
 	if c.Port != 10000 || c.UserIDField != "sub" || c.OpaPolicyPackage != "carbynestack.def" || c.OpaURL != "http://opa.carbynestack.io" ||
 		c.OpeningTimeoutMs != 5000 || c.PlayerID != 0 || c.NoSSLValidation || c.DBHost != "localhost" || c.DBPort != 5432 || c.DBName != "amphora" ||
-		c.LogLevel != "INFO" || c.JavaTagReplaceBug || c.InputMaskStore != "input-mask-store" || c.InterimValueStore != "interim-value-store" ||
+		c.LogLevel != "INFO" || !c.JavaTagReplaceBug || c.InputMaskStore != "input-mask-store" || c.InterimValueStore != "interim-value-store" ||
 		c.MinioBucket != "minio-amphora-bucket" || c.MinioAccessKey != "dummy-key" || c.MinioSecretKey != "dummy-secret" ||
 		len(c.VCPartners) != 0 || len(c.TrustedCertificates) != 0 || c.InterimKeyPrefix() != "interim-value-store::" {
 		t.Fatalf("%+v", c)

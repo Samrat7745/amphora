@@ -21,7 +21,7 @@ package manager.
 
 ## Prerequisites
 
-- Kubernetes 1.25+ (the chart declares `kubeVersion: ">=1.25.0-0"`; tested on 1.36 and 1.37)
+- Kubernetes 1.10+ (may also work on earlier versions but has not been tested)
 - A Docker Hub account with read access permission for the organization
   `iotspecs` and a Kubernetes Secret with your registry credentials (see the
   section on [Registry Credentials](#registry-credentials)).
@@ -75,12 +75,11 @@ documentation for the
 | `amphora.openingTimeout`                    | Number of seconds to wait for all partners to open their multiplication input             | `5000`                                        |
 | `amphora.noSslValidation`                   | Defines whether SSL verification should be disabled for inter VC communication            | `false`                                       |
 | `amphora.trustedCertificates`               | Path to certificates that should be used to verify SSL connections                        | \`\`                                          |
-| `amphora.image.registry`                    | Amphora Image registry                                                                    | `ghcr.io`                                     |
-| `amphora.image.repository`                  | Amphora Image name (the Go service image; the Java image uses the same name and tags)     | `carbynestack/amphora-service`                |
+| `amphora.image.registry`                    | Amphora Image registry                                                                    | `docker.io`                                   |
+| `amphora.image.repository`                  | Amphora Image name                                                                        | `iotspecs/amphora-service`                    |
 | `amphora.image.tag`                         | Amphora Image tag                                                                         | `latest`                                      |
-| `amphora.image.pullPolicy`                  | Amphora Image pull policy                                                                 | `IfNotPresent`                                |
-| `amphora.springActiveProfiles`              | Only used by the legacy Java image; ignored by the Go service                             | `k8s`                                         |
-| `amphora.compatJavaTagReplaceBug`           | Go service only: reproduce the Java defect where `PUT /secret-shares/{id}/tags` always fails | `false`                                    |
+| `amphora.image.pullPolicy`                  | Amphora Image pull policy                                                                 | `Never`                                       |
+| `amphora.springActiveProfiles`              | Defines the Amphora's Spring profiles to be loaded                                        | `k8s`                                         |
 | `amphora.macKey`                            | Defines the MacKey used for secret sharing                                                | \`\`                                          |
 | `amphora.castor.serviceUri`                 | Defines the URI for Castor service                                                        | `castor.default.svc.cluster.local`            |
 | `amphora.redis.host`                        | The host address to the redis key/value store                                             | `redis.default.svc.cluster.local`             |
@@ -88,7 +87,6 @@ documentation for the
 | `amphora.minio.endpoint`                    | The minio secret store endpoint                                                           | `http://minio.default.svc.cluster.local:9000` |
 | `amphora.db.host`                           | The postgres database host                                                                | `dbms-repl.default.svc.cluster.local`         |
 | `amphora.db.port`                           | The postgres database port                                                                | `5432`                                        |
-| `amphora.db.name`                           | The postgres database name (Go service; the Java service always uses `amphora`)           | `amphora`                                     |
 | `amphora.db.userSecretName`                 | Name of an existing secret to be used for the database username                           | \`\`                                          |
 | `amphora.db.passwordSecretName`             | Name of an existing secret to be used for the database password                           | \`\`                                          |
 | `amphora.probes.liveness.initialDelay`      | Number of seconds after the container has started before the liveness probe is initiated  | `60`                                          |
