@@ -3,8 +3,6 @@ package client
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,11 +10,11 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
+	httpclient "github.com/Samrat7745/java-http-client"
 	"github.com/carbynestack/amphora-go/spdz"
 )
 
@@ -100,25 +98,25 @@ func newBase(o Options) (*base, error) {
 		}
 		addrs = append(addrs, strings.TrimSuffix(u.String(), "/"))
 	}
-	pool, err := x509.SystemCertPool()
-	if err != nil || pool == nil {
-		pool = x509.NewCertPool()
-	}
-	for _, p := range o.TrustedCertificates {
-		pem, err := os.ReadFile(p)
-		if err != nil {
-			return nil, &ClientError{"Failed to create AmphoraCommunicationClient.", err}
-		}
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, &ClientError{"Failed to create AmphoraCommunicationClient.", fmt.Errorf("no certificates in %s", p)}
-		}
-	}
 	to := o.Timeout
 	if to == 0 {
 		to = 60 * time.Second
 	}
-	return &base{opt: o, addrs: addrs, http: &http.Client{Timeout: to, Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{RootCAs: pool, InsecureSkipVerify: o.NoSSLValidation}, MaxIdleConnsPerHost: 8}}}, nil
+	// The HTTP client library provides the trust management (system roots plus
+	// TrustedCertificates) and the redirect policy of the Java client.
+	hc, err := httpclient.New[string](
+		httpclient.WithoutSSLValidation(o.NoSSLValidation),
+		httpclient.WithTrustedCertificates(o.TrustedCertificates...),
+		httpclient.WithTimeout(to),
+		httpclient.WithMaxIdleConnsPerHost(8),
+	)
+	if err != nil {
+		if cause := errors.Unwrap(err); cause != nil {
+			err = cause
+		}
+		return nil, &ClientError{"Failed to create AmphoraCommunicationClient.", err}
+	}
+	return &base{opt: o, addrs: addrs, http: hc.HTTPClient()}, nil
 }
 
 // queryOrder is the order in which the Java client appends its query parameters; others follow sorted.
@@ -175,7 +173,8 @@ func (b *base) do(ctx context.Context, method, addr, path string, query url.Valu
 	}
 	req.Header.Set("Accept", "application/json")
 	if auth && b.opt.BearerTokenProvider != nil {
-		req.Header.Set("Authorization", "Bearer "+b.opt.BearerTokenProvider(addr))
+		token := httpclient.BearerToken(b.opt.BearerTokenProvider(addr))
+		req.Header.Set(token.Name, token.Value)
 	}
 	resp, err := b.http.Do(req)
 	if err != nil {

@@ -3,6 +3,8 @@ module github.com/carbynestack/amphora-go
 go 1.26.10
 
 require (
+	github.com/Samrat7745/java-http-client v0.0.0-20261117073951-d54d9102e1d7
+	github.com/Samrat7745/mp-spdz-integration v0.0.0-20261117073745-6374a84ee402
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.11.0

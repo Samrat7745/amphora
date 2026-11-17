@@ -1,5 +1,5 @@
-// Package spdz reimplements io.carbynestack:mp-spdz-integration (MpSpdzIntegrationUtils) with
-// math/big: conversion between the 16 byte SPDZ gfp wire format (Montgomery form, limb swapped)
+// Package spdz wraps the Go port of io.carbynestack:mp-spdz-integration (MpSpdzIntegrationUtils):
+// conversion between the 16 byte SPDZ gfp wire format (Montgomery form, limb swapped)
 // and big integers, plus Java's UUID.nameUUIDFromBytes.
 package spdz
 
@@ -7,45 +7,35 @@ import (
 	"crypto/md5"
 	"fmt"
 	"math/big"
+	"sync"
+
+	mpspdz "github.com/Samrat7745/mp-spdz-integration"
 )
 
 const (
-	LimbWidth = 8
-	WordWidth = 16
+	LimbWidth = mpspdz.LimbWidth
+	WordWidth = mpspdz.WordWidth
 	// ShareWidth is value(16) || mac(16).
-	ShareWidth = 32
+	ShareWidth = mpspdz.ShareWidth
 )
 
-// Utils holds the field parameters.
+// Utils holds the field parameters. The conversions are done by the mp-spdz-integration library;
+// this type keeps the exported fields and the Java exception texts the service relies on.
 type Utils struct {
 	Prime, R, RInv *big.Int
+
+	once sync.Once
+	impl *mpspdz.IntegrationUtils
+	err  error
 }
 
 // New creates Utils for the given prime, Montgomery R and R^-1.
 func New(prime, r, rInv *big.Int) *Utils { return &Utils{Prime: prime, R: r, RInv: rInv} }
 
-func reverse(b []byte) []byte {
-	o := make([]byte, len(b))
-	for i := range b {
-		o[len(b)-1-i] = b[i]
-	}
-	return o
-}
-
-func invertLimbEndianness(b []byte) []byte {
-	o := make([]byte, 0, len(b))
-	for i := 0; i < len(b); i += LimbWidth {
-		o = append(o, reverse(b[i:i+LimbWidth])...)
-	}
-	return o
-}
-
-func swapLimbs(b []byte) []byte {
-	o := make([]byte, 0, len(b))
-	for i := len(b) - LimbWidth; i >= 0; i -= LimbWidth {
-		o = append(o, b[i:i+LimbWidth]...)
-	}
-	return o
+// lib returns the mp-spdz-integration converter for the field parameters (built on first use).
+func (u *Utils) lib() (*mpspdz.IntegrationUtils, error) {
+	u.once.Do(func() { u.impl, u.err = mpspdz.New(u.Prime, u.R, u.RInv) })
+	return u.impl, u.err
 }
 
 // FromGfp decodes a 16 byte gfp value. Errors carry the exact Java IllegalArgumentException text.
@@ -53,9 +43,11 @@ func (u *Utils) FromGfp(b []byte) (*big.Int, error) {
 	if len(b) != WordWidth {
 		return nil, fmt.Errorf("Gfp byte representation must have a length of %d. Actual: %d.", WordWidth, len(b))
 	}
-	x := new(big.Int).SetBytes(swapLimbs(invertLimbEndianness(b))) // unsigned big endian
-	x.Mul(x, u.RInv)
-	return x.Mod(x, u.Prime), nil
+	lib, err := u.lib()
+	if err != nil {
+		return nil, err
+	}
+	return lib.FromGfp(b)
 }
 
 // ToGfp encodes v (0 <= v <= p) as a 16 byte gfp value.
@@ -66,14 +58,18 @@ func (u *Utils) ToGfp(v *big.Int) ([]byte, error) {
 	if v.Sign() < 0 {
 		return nil, fmt.Errorf("Value must not be negative. Actual: %s.", v)
 	}
-	m := new(big.Int).Mul(v, u.R)
-	m.Mod(m, u.Prime)
-	if m.BitLen() > WordWidth*8 {
-		return nil, fmt.Errorf("value does not fit into %d bytes", WordWidth)
+	// The library truncates Montgomery values wider than a word; report them instead.
+	if u.Prime.BitLen() > WordWidth*8 {
+		m := new(big.Int).Mul(v, u.R)
+		if m.Mod(m, u.Prime).BitLen() > WordWidth*8 {
+			return nil, fmt.Errorf("value does not fit into %d bytes", WordWidth)
+		}
 	}
-	be := make([]byte, WordWidth)
-	m.FillBytes(be)
-	return swapLimbs(invertLimbEndianness(be)), nil
+	lib, err := u.lib()
+	if err != nil {
+		return nil, err
+	}
+	return lib.ToGfp(v)
 }
 
 // NameUUIDFromBytes is java.util.UUID.nameUUIDFromBytes (version 3, MD5, no namespace).

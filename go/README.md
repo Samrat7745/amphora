@@ -50,6 +50,23 @@ id, _ := c.CreateSecret(ctx, client.NewSecret(nil, []*big.Int{big.NewInt(42)}))
 s, _ := c.GetSecret(ctx, id)
 ```
 
+### Shared libraries
+
+The HTTP clients (the Go client in `client/` and the service's own clients for its peers) are
+built with [`github.com/Samrat7745/java-http-client`](https://github.com/Samrat7745/java-http-client),
+the Go port of the Carbyne Stack `java-http-client` library. It provides the trust management
+(system roots plus the trusted certificates), the bearer token header and the redirect policy of
+the Java client: only GET requests follow redirects, and `303 See Other` is followed for any
+method; another redirect answer to a POST or PUT is treated as a failed (non-2xx) response.
+Requests use HTTP/1.1. A trusted certificate file may be PEM (all certificates of a bundle are
+loaded) or DER; a file that cannot be read fails the construction with
+`Unable to configure certificate management ...`. Trusted certificates are ignored when SSL
+validation is switched off.
+
+The `spdz` package delegates the conversion between big integers and the MP-SPDZ gfp format to
+[`github.com/Samrat7745/mp-spdz-integration`](https://github.com/Samrat7745/mp-spdz-integration),
+the Go port of the `mp-spdz-integration` library, and keeps the Java exception texts.
+
 ## Testing
 
 ```bash

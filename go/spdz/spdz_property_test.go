@@ -113,38 +113,19 @@ func TestEdgeValues(t *testing.T) {
 	}
 }
 
-func TestLimbHelpers(t *testing.T) {
-	r := rand.New(rand.NewSource(3))
-	for i := 0; i < 200; i++ {
-		b := make([]byte, WordWidth)
-		r.Read(b)
-		// involutions
-		if !bytes.Equal(reverse(reverse(b)), b) || !bytes.Equal(invertLimbEndianness(invertLimbEndianness(b)), b) || !bytes.Equal(swapLimbs(swapLimbs(b)), b) {
-			t.Fatal("helpers must be involutions")
-		}
-		// reverse of whole = swap limbs after limb-endianness inversion
-		if !bytes.Equal(reverse(b), swapLimbs(invertLimbEndianness(b))) {
-			t.Fatal("full reverse = swapLimbs o invertLimbEndianness")
-		}
-		// input is not modified
-		c := append([]byte(nil), b...)
-		_ = swapLimbs(c)
-		_ = invertLimbEndianness(c)
-		if !bytes.Equal(b, c) {
-			t.Fatal("input modified")
-		}
-	}
-	in := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
-	if got := swapLimbs(in); !bytes.Equal(got, []byte{8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7}) {
-		t.Fatalf("%v", got)
-	}
-	if got := invertLimbEndianness(in); !bytes.Equal(got, []byte{7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8}) {
-		t.Fatalf("%v", got)
-	}
-	// 1 in Montgomery form is R mod p: the wire bytes of the value 1 are the (limb swapped) R
+// The limb helpers (and their tests) live in the mp-spdz-integration library now; what stays here
+// is the observable wire property: 1 in Montgomery form is R mod p, and the wire format is the
+// byte-reversed big-endian value.
+func TestOneEncodesAsR(t *testing.T) {
 	u := testUtils()
-	b, _ := u.ToGfp(big.NewInt(1))
-	be := swapLimbs(invertLimbEndianness(b))
+	b, err := u.ToGfp(big.NewInt(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	be := make([]byte, len(b))
+	for i := range b {
+		be[len(b)-1-i] = b[i]
+	}
 	if new(big.Int).SetBytes(be).Cmp(u.R) != 0 {
 		t.Fatalf("1 must encode as R, got %x", be)
 	}
