@@ -4,7 +4,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/carbynestack/amphora-go/internal/jwt"
+	"github.com/Samrat7745/amphora/go/internal/jwt"
 )
 
 // The Istio "/amphora" prefix rewrite delivers requests as "//input-masks" etc. Spring (the Java service)

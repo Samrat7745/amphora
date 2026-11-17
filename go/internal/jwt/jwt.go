@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/carbynestack/amphora-go/internal/model"
+	"github.com/Samrat7745/amphora/go/internal/model"
 )
 
 // Reader reads the configured (possibly dotted) claim.

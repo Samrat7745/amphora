@@ -11,8 +11,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/carbynestack/amphora-go/internal/e2e"
-	"github.com/carbynestack/amphora-go/internal/testkit"
+	"github.com/Samrat7745/amphora/go/internal/e2e"
+	"github.com/Samrat7745/amphora/go/internal/testkit"
 )
 
 func main() {

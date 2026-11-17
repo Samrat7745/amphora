@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/carbynestack/amphora-go/internal/testkit"
+	"github.com/Samrat7745/amphora/go/internal/testkit"
 	"github.com/minio/minio-go/v7"
 )
 

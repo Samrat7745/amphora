@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/carbynestack/amphora-go/internal/httpx"
-	"github.com/carbynestack/amphora-go/internal/model"
+	"github.com/Samrat7745/amphora/go/internal/httpx"
+	"github.com/Samrat7745/amphora/go/internal/model"
 )
 
 // Client posts exchange objects to every partner.

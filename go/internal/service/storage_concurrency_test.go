@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/carbynestack/amphora-go/internal/model"
-	"github.com/carbynestack/amphora-go/internal/opa"
+	"github.com/Samrat7745/amphora/go/internal/model"
+	"github.com/Samrat7745/amphora/go/internal/opa"
 )
 
 // Concurrency behaviour of the storage service against real Postgres/Redis/Minio. Run with -race.

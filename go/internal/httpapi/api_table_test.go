@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/carbynestack/amphora-go/internal/jwt"
-	"github.com/carbynestack/amphora-go/internal/model"
-	"github.com/carbynestack/amphora-go/internal/pgstore"
+	"github.com/Samrat7745/amphora/go/internal/jwt"
+	"github.com/Samrat7745/amphora/go/internal/model"
+	"github.com/Samrat7745/amphora/go/internal/pgstore"
 )
 
 const sid = testSecretID

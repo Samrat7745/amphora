@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/carbynestack/amphora-go/internal/httpx"
+	"github.com/Samrat7745/amphora/go/internal/httpx"
 )
 
 // Tuple types used by Amphora.

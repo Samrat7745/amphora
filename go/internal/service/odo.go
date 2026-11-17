@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/carbynestack/amphora-go/internal/castor"
-	"github.com/carbynestack/amphora-go/internal/model"
-	"github.com/carbynestack/amphora-go/spdz"
+	"github.com/Samrat7745/amphora/go/internal/castor"
+	"github.com/Samrat7745/amphora/go/internal/model"
+	"github.com/Samrat7745/amphora/go/spdz"
 )
 
 // TupleSource downloads tuple shares from Castor.

@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/carbynestack/amphora-go/spdz"
+	"github.com/Samrat7745/amphora/go/spdz"
 	"github.com/google/uuid"
 )
 

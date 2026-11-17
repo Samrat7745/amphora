@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/carbynestack/amphora-go/internal/model"
+	"github.com/Samrat7745/amphora/go/internal/model"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"

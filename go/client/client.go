@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Samrat7745/amphora/go/spdz"
 	httpclient "github.com/Samrat7745/java-http-client"
-	"github.com/carbynestack/amphora-go/spdz"
 )
 
 // Messages mirror DefaultAmphoraClient.

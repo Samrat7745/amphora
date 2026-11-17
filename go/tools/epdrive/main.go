@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/carbynestack/amphora-go/internal/testkit"
+	"github.com/Samrat7745/amphora/go/internal/testkit"
 )
 
 const program = `listen(10000)

@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/carbynestack/amphora-go/internal/javaser"
-	"github.com/carbynestack/amphora-go/internal/model"
+	"github.com/Samrat7745/amphora/go/internal/javaser"
+	"github.com/Samrat7745/amphora/go/internal/model"
 	"github.com/redis/go-redis/v9"
 )
 

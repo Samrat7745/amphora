@@ -1,5 +1,4 @@
-module github.com/carbynestack/amphora-go
-
+module github.com/Samrat7745/amphora/go
 go 1.26.10
 
 require (

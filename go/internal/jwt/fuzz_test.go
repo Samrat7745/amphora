@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/carbynestack/amphora-go/internal/model"
+	"github.com/Samrat7745/amphora/go/internal/model"
 )
 
 // FuzzUserID: the claim extraction runs on unauthenticated input. It must never panic and every failure must be a

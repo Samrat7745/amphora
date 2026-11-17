@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/carbynestack/amphora-go/internal/model"
-	"github.com/carbynestack/amphora-go/internal/testkit"
+	"github.com/Samrat7745/amphora/go/internal/model"
+	"github.com/Samrat7745/amphora/go/internal/testkit"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 

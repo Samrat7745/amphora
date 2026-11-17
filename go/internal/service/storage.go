@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/carbynestack/amphora-go/internal/castor"
-	"github.com/carbynestack/amphora-go/internal/javaser"
-	"github.com/carbynestack/amphora-go/internal/model"
-	"github.com/carbynestack/amphora-go/internal/objstore"
-	"github.com/carbynestack/amphora-go/internal/opa"
-	"github.com/carbynestack/amphora-go/internal/pgstore"
-	"github.com/carbynestack/amphora-go/internal/rediscache"
-	"github.com/carbynestack/amphora-go/spdz"
+	"github.com/Samrat7745/amphora/go/internal/castor"
+	"github.com/Samrat7745/amphora/go/internal/javaser"
+	"github.com/Samrat7745/amphora/go/internal/model"
+	"github.com/Samrat7745/amphora/go/internal/objstore"
+	"github.com/Samrat7745/amphora/go/internal/opa"
+	"github.com/Samrat7745/amphora/go/internal/pgstore"
+	"github.com/Samrat7745/amphora/go/internal/rediscache"
+	"github.com/Samrat7745/amphora/go/spdz"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
